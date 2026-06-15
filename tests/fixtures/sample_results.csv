@@ -1,0 +1,5 @@
+date,home_team,away_team,home_score,away_score,tournament,city,country,neutral
+2022-11-20,Qatar,Ecuador,0,2,FIFA World Cup,Al Khor,Qatar,FALSE
+2022-11-21,England,Iran,6,2,FIFA World Cup,Al Rayyan,Qatar,TRUE
+2022-11-21,Senegal,Netherlands,0,2,FIFA World Cup,Al Khor,Qatar,TRUE
+2026-06-11,Mexico,TBD,,,FIFA World Cup,Mexico City,Mexico,FALSE
