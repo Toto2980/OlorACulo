@@ -50,10 +50,10 @@ def score_matrix(
     home_pmf = np.array([poisson_pmf(i, lam_home) for i in range(max_goals + 1)])
     away_pmf = np.array([poisson_pmf(j, lam_away) for j in range(max_goals + 1)])
     m = np.outer(home_pmf, away_pmf)
-    m[0, 0] *= 1.0 - lam_home * lam_away * rho
-    m[0, 1] *= 1.0 + lam_home * rho
-    m[1, 0] *= 1.0 + lam_away * rho
-    m[1, 1] *= 1.0 - rho
+    # corrección Dixon-Coles en las 4 celdas de marcador bajo (única fuente: dc_tau)
+    for i in (0, 1):
+        for j in (0, 1):
+            m[i, j] *= dc_tau(i, j, lam_home, lam_away, rho)
     return m / m.sum()
 
 
