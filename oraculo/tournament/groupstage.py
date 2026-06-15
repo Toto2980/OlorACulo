@@ -12,6 +12,7 @@ from oraculo.tournament.group import TeamRecord, simulate_group
 class GroupStageResult:
     standings: dict[str, list[TeamRecord]]
     advancing: set[str]
+    best_thirds: list[TeamRecord]
 
 
 def simulate_group_stage(
@@ -36,4 +37,4 @@ def simulate_group_stage(
     for record in best_thirds:
         advancing.add(record.team)
 
-    return GroupStageResult(standings=standings, advancing=advancing)
+    return GroupStageResult(standings=standings, advancing=advancing, best_thirds=best_thirds)
