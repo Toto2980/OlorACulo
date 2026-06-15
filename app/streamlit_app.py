@@ -95,6 +95,13 @@ st.markdown(
       }
       .stTabs [aria-selected="true"] {background:#1f2735; color:#fff;}
       .caption {color:#8A94A6; font-size:.85rem;}
+      .fav {background: linear-gradient(135deg,#13322a,#0e7a5f); border:1px solid #1f6e58;
+        border-radius:14px; padding:14px 18px; font-size:1.15rem; color:#eafff8; margin-bottom:14px;}
+      .verdict {background:#161B26; border:1px solid #232a39; border-left:4px solid #00C2A8;
+        border-radius:10px; padding:10px 16px; margin:4px 0 14px; color:#E6E9EF;}
+      .footer {text-align:center; color:#5d6675; font-size:.8rem; margin-top:38px;
+        padding-top:14px; border-top:1px solid #232a39;}
+      .footer a {color:#00C2A8; text-decoration:none;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -137,28 +144,39 @@ with tab_match:
     m2.metric("Empate", f"{pred.p_draw * 100:.1f}%")
     m3.metric(with_flag(away), f"{pred.p_away * 100:.1f}%", "gana")
 
-    outcomes = pd.DataFrame(
+    options = {f"Gana {home}": pred.p_home, "Empate": pred.p_draw, f"Gana {away}": pred.p_away}
+    best = max(options, key=options.get)
+    st.markdown(
+        f"<div class='verdict'>Resultado más probable: <b>{best}</b> · {options[best] * 100:.0f}%</div>",
+        unsafe_allow_html=True,
+    )
+
+    seg = pd.DataFrame(
         {
             "Resultado": [f"Gana {home}", "Empate", f"Gana {away}"],
             "Probabilidad": [pred.p_home, pred.p_draw, pred.p_away],
+            "orden": [0, 1, 2],
         }
     )
-    chart = (
-        alt.Chart(outcomes)
-        .mark_bar(cornerRadiusEnd=6, size=34)
+    bar = (
+        alt.Chart(seg)
+        .mark_bar()
         .encode(
-            x=alt.X("Probabilidad:Q", axis=alt.Axis(format="%"), title=None),
-            y=alt.Y("Resultado:N", sort=None, title=None),
+            x=alt.X("Probabilidad:Q", stack="normalize", axis=alt.Axis(format="%"), title=None),
             color=alt.Color(
                 "Resultado:N",
-                scale=alt.Scale(range=[ACCENT, MUTED, ACCENT_2]),
-                legend=None,
+                scale=alt.Scale(
+                    domain=[f"Gana {home}", "Empate", f"Gana {away}"],
+                    range=[ACCENT, MUTED, ACCENT_2],
+                ),
+                legend=alt.Legend(orient="bottom", title=None),
             ),
-            tooltip=[alt.Tooltip("Probabilidad:Q", format=".1%")],
+            order=alt.Order("orden:Q"),
+            tooltip=["Resultado", alt.Tooltip("Probabilidad:Q", format=".1%")],
         )
-        .properties(height=180)
+        .properties(height=84)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(bar, use_container_width=True)
 
     if pred.xg_home is not None:
         left, right = st.columns(2)
@@ -188,15 +206,22 @@ with tab_cup:
         with st.spinner(f"Corriendo {n_iter:,} torneos..."):
             probs = champion_probs(n_iter)
         ranking = sorted(get_config().teams, key=lambda t: probs[t]["Champion"], reverse=True)
+        fav = ranking[0]
+        st.markdown(
+            f"<div class='fav'>🏆 Favorito: <b>{with_flag(fav)}</b> · "
+            f"{probs[fav]['Champion'] * 100:.1f}% de chances de campeón</div>",
+            unsafe_allow_html=True,
+        )
+        medals = {0: "🥇", 1: "🥈", 2: "🥉"}
         df = pd.DataFrame(
             [
                 {
-                    "Equipo": with_flag(t),
+                    "Equipo": f"{medals.get(i, '')} {with_flag(t)}".strip(),
                     "Campeón": probs[t]["Champion"] * 100,
                     "Final": probs[t]["Final"] * 100,
                     "Semis": probs[t]["SF"] * 100,
                 }
-                for t in ranking
+                for i, t in enumerate(ranking)
             ]
         )
         top = df.head(12)
@@ -295,3 +320,11 @@ with tab_metrics:
         )
     else:
         st.info("Apretá **Calcular métricas** (tarda unos segundos la primera vez).")
+
+
+st.markdown(
+    "<div class='footer'>OlorACulo · datos: martj42/international_results · "
+    "modelo Poisson + Dixon-Coles · "
+    "<a href='https://github.com/Toto2980/OlorACulo' target='_blank'>código en GitHub</a></div>",
+    unsafe_allow_html=True,
+)
