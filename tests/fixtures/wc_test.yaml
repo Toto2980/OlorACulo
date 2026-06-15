@@ -1,0 +1,4 @@
+seed: 7
+groups:
+  A: [Argentina, Brazil, Chile, Peru]
+  B: [France, Spain, Italy, Germany]
