@@ -13,9 +13,9 @@ from oraculo.calibrate.elo import calibrate_elo
 DATA = Path(__file__).resolve().parent.parent / "data" / "results.csv"
 EVAL_FROM = datetime.date(2010, 1, 1)
 
-K_VALUES = [10.0, 20.0, 30.0, 40.0]
-HOME_ADV_VALUES = [0.0, 50.0, 65.0, 100.0]
-NU_VALUES = [0.3, 0.6, 1.0]
+K_VALUES = [20.0, 40.0, 60.0, 80.0]
+HOME_ADV_VALUES = [65.0, 100.0, 135.0, 170.0]
+NU_VALUES = [0.4, 0.6, 0.8]
 
 
 def main() -> None:

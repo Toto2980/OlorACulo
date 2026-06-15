@@ -59,6 +59,14 @@ class EloModel:
         neutral: bool = False,
         on_date: datetime.date | None = None,
     ) -> MatchPrediction:
+        """Predice usando los ratings ACTUALES del modelo.
+
+        `on_date` no se usa internamente: el Elo es incremental, así que es
+        responsabilidad del caller que `self.ratings` ya refleje el estado hasta
+        la fecha de corte (el backtest `walk_forward` lo garantiza al predecir
+        antes de observar cada partido; para predicción en vivo, llamar a `fit`
+        con los partidos previos al corte).
+        """
         dr = self.rating(home) - self.rating(away)
         if not neutral:
             dr += self.config.home_adv
