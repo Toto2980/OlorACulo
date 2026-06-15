@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import math
 from dataclasses import dataclass
 from typing import Optional, Protocol
@@ -37,5 +38,12 @@ class Predictor(Protocol):
         away: str,
         *,
         neutral: bool = False,
-        on_date=None,
-    ) -> MatchPrediction: ...
+        on_date: datetime.date | None = None,
+    ) -> MatchPrediction:
+        """Predice un partido.
+
+        `on_date` es la fecha *de corte*: el modelo solo puede usar datos
+        anteriores a ella (no la incluye). Los modelos con estado (Elo, Poisson)
+        la usan para evitar fugas de información en el backtest walk-forward.
+        """
+        ...
