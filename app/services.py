@@ -8,8 +8,14 @@ from oraculo.match import Match
 from oraculo.models.uniform import UniformPredictor
 from oraculo.models.elo import EloModel
 from oraculo.models.poisson import PoissonConfig, PoissonModel
+from typing import TYPE_CHECKING
+
 from oraculo.evaluate.backtest import backtest, EvalResult
 from oraculo.evaluate.walk_forward import walk_forward
+from app.flags import display_name
+
+if TYPE_CHECKING:
+    from oraculo.report.match_report import MatchReport
 
 
 def top_scorelines(matrix: np.ndarray, n: int = 5) -> list[tuple[tuple[int, int], float]]:
@@ -37,3 +43,33 @@ def model_comparison(
             eval_from=eval_from,
         ),
     }
+
+
+def prode_verdict(report: "MatchReport") -> str:
+    """Conclusión pre-partido en lenguaje natural a partir del MatchReport.
+    Determinística (sin LLM ni internet)."""
+    probs = {report.home: report.p_home, report.away: report.p_away}
+    fav = max(probs, key=probs.get)
+    rival = report.away if fav == report.home else report.home
+    fav_p = probs[fav]
+    spread = max(report.p_home, report.p_draw, report.p_away)
+
+    if spread < 0.45:
+        tono = (
+            f"Cruce parejo entre {display_name(fav)} y {display_name(rival)}: "
+            f"{display_name(fav)} apenas favorito ({fav_p * 100:.0f}%)."
+        )
+    else:
+        tono = (
+            f"{display_name(fav)} llega favorito ({fav_p * 100:.0f}%) "
+            f"ante {display_name(rival)}."
+        )
+
+    if report.over25 >= 0.55:
+        goles = f"Se esperan goles (Over 2.5 al {report.over25 * 100:.0f}%)."
+    elif report.over25 <= 0.40:
+        goles = f"Partido trabado, pocos goles (Over 2.5 al {report.over25 * 100:.0f}%)."
+    else:
+        goles = f"Los goles están en duda (Over 2.5 al {report.over25 * 100:.0f}%)."
+
+    return f"{tono} {goles}"
