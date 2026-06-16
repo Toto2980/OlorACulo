@@ -13,12 +13,12 @@ def _raw():
 
 def test_parse_returns_fixture_per_match():
     fixtures = parse_fixtures(_raw())
-    assert len(fixtures) == 3
+    assert len(fixtures) == 4
     assert all(isinstance(f, Fixture) for f in fixtures)
 
 
 def test_parse_finished_match_has_score_and_outcome():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 537327)
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 1001)
     assert f.home == "Mexico"
     assert f.away == "South Africa"
     assert f.status == "FINISHED"
@@ -28,7 +28,7 @@ def test_parse_finished_match_has_score_and_outcome():
 
 
 def test_parse_canonicalizes_names_and_normalizes_status():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 537328)
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 1002)
     # "Czechia" (API) -> "Czech Republic" (canónico del dataset)
     assert f.away == "Czech Republic"
     assert f.home == "South Korea"   # la API ya usa este nombre
@@ -38,7 +38,7 @@ def test_parse_canonicalizes_names_and_normalizes_status():
 
 
 def test_parse_unresolved_teams_become_none():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 537417)
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 1003)
     assert f.home is None and f.away is None
     assert f.stage == "LAST_32"
     assert not f.resolved
