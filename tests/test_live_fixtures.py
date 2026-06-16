@@ -1,0 +1,59 @@
+import datetime
+import json
+from pathlib import Path
+
+from oraculo.live.fixtures import Fixture, parse_fixtures, phase_label, normalize_status
+
+SAMPLE = Path(__file__).parent / "fixtures" / "wc_matches_sample.json"
+
+
+def _raw():
+    return json.loads(SAMPLE.read_text(encoding="utf-8"))
+
+
+def test_parse_returns_fixture_per_match():
+    fixtures = parse_fixtures(_raw())
+    assert len(fixtures) == 3
+    assert all(isinstance(f, Fixture) for f in fixtures)
+
+
+def test_parse_finished_match_has_score_and_outcome():
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537327)
+    assert f.home == "Mexico"
+    assert f.away == "South Africa"
+    assert f.status == "FINISHED"
+    assert f.is_finished
+    assert (f.home_goals, f.away_goals) == (2, 0)
+    assert f.kickoff_utc == datetime.datetime(2026, 6, 11, 19, 0, tzinfo=datetime.timezone.utc)
+
+
+def test_parse_canonicalizes_names_and_normalizes_status():
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537328)
+    # "Czechia" (API) -> "Czech Republic" (canónico del dataset)
+    assert f.away == "Czech Republic"
+    assert f.home == "South Korea"   # la API ya usa este nombre
+    assert f.group == "A"
+    assert f.status == "SCHEDULED"   # normalizado desde "TIMED"
+    assert f.home_goals is None
+
+
+def test_parse_unresolved_teams_become_none():
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537417)
+    assert f.home is None and f.away is None
+    assert f.stage == "LAST_32"
+    assert not f.resolved
+
+
+def test_normalize_status_maps_api_vocabulary():
+    assert normalize_status("TIMED") == "SCHEDULED"
+    assert normalize_status("IN_PLAY") == "LIVE"
+    assert normalize_status("PAUSED") == "LIVE"
+    assert normalize_status("FINISHED") == "FINISHED"
+    assert normalize_status("POSTPONED") == "POSTPONED"
+
+
+def test_phase_label_maps_stages():
+    assert phase_label("GROUP_STAGE") == "Grupos"
+    assert phase_label("LAST_32") == "16vos"
+    assert phase_label("LAST_16") == "8vos"
+    assert phase_label("FINAL") == "Final"
