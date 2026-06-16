@@ -20,8 +20,8 @@ from oraculo.models.elo import EloModel
 from oraculo.models.poisson import PoissonConfig, PoissonModel
 from oraculo.tournament.config import load_config
 from oraculo.tournament.tournament import run_tournament_mc
-from app.services import top_scorelines, model_comparison
-from app.flags import with_flag
+from app.services import top_scorelines, model_comparison, prode_verdict
+from app.flags import with_flag, display_name
 
 import os
 
@@ -31,7 +31,15 @@ from oraculo.report.match_report import build_match_report
 from oraculo.verify.predictor import frozen_poisson
 from oraculo.verify.scoring import score_match, aggregate, calibration_bins
 from app.live_view import group_by_phase, upcoming_rows, finished_rows
-from app.charts import ranking_bar, calibration_chart
+from app.charts import (
+    ranking_bar,
+    calibration_chart,
+    scoreline_heatmap,
+    xg_bars,
+    markets_bars,
+    progression_bars,
+    rps_line,
+)
 
 DATA = ROOT / "data" / "results.csv"
 WC = ROOT / "data" / "wc2026.yaml"
@@ -237,8 +245,8 @@ st.markdown(
 
 teams = sorted(get_config().teams)
 
-tab_live, tab_bracket, tab_match, tab_cup, tab_verify = st.tabs(
-    ["🔴  En vivo", "🗺️  Cuadro", "⚽  Partido", "🏆  Mundial", "🎯  Verificación"]
+tab_live, tab_bracket, tab_match, tab_prode, tab_cup, tab_verify = st.tabs(
+    ["🔴  En vivo", "🗺️  Cuadro", "⚽  Partido", "📋  Prode", "🏆  Mundial", "🎯  Verificación"]
 )
 
 
@@ -340,7 +348,7 @@ with tab_match:
         )
         .properties(height=84)
     )
-    st.altair_chart(bar, use_container_width=True)
+    st.altair_chart(bar, width="stretch")
 
     if pred.xg_home is not None:
         left, right = st.columns(2)
@@ -358,17 +366,118 @@ with tab_match:
                     unsafe_allow_html=True,
                 )
 
+        st.markdown("**Mapa de calor de marcadores**")
+        st.altair_chart(
+            scoreline_heatmap(pred.score_matrix, with_flag(home), with_flag(away)),
+            width="stretch",
+        )
+        st.altair_chart(
+            xg_bars(with_flag(home), with_flag(away), pred.xg_home, pred.xg_away),
+            width="stretch",
+        )
+
         report = build_match_report(model, home, away, neutral=neutral)
         st.markdown("**Mercados derivados**")
         d1, d2 = st.columns(2)
         d1.metric("Ambos marcan (BTTS)", f"{report.btts * 100:.0f}%")
         d2.metric("Over 2.5 goles", f"{report.over25 * 100:.0f}%")
+        st.altair_chart(markets_bars(report.btts, report.over25, report.over15), width="stretch")
         st.markdown(
             f"<div class='caption'>⚠️ Estimación (no sale del modelo): "
-            f"favorito a convertir <b>{report.speculative.top_scorer_team}</b> · "
+            f"favorito a convertir <b>{display_name(report.speculative.top_scorer_team)}</b> · "
             f"tarjetas estimadas {report.speculative.cards_band}.</div>",
             unsafe_allow_html=True,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Vista: Prode (análisis pre-partido)
+# --------------------------------------------------------------------------- #
+with tab_prode:
+    st.subheader("📋 El prode del oráculo")
+    st.markdown(
+        '<p class="caption">Análisis pre-partido completo para armar tu prode. '
+        'Usa el modelo Poisson y cancha neutral (es Mundial).</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Selección de partido: fixtures reales si hay; si no, dos equipos cualquiera.
+    try:
+        fixtures, _ = get_fixtures()
+    except LiveDataError:
+        fixtures = []
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    proximos = (
+        [r for r in upcoming_rows(fixtures, now=now) if "vs" in r["partido"]]
+        if fixtures
+        else []
+    )
+    # Solo cruces con ambos equipos definidos y conocidos por el modelo.
+    candidatos = []
+    for r in proximos:
+        partes = r["partido"].split(" vs ")
+        if len(partes) == 2 and partes[0] in teams and partes[1] in teams:
+            candidatos.append((r["fase"], partes[0], partes[1], r["kickoff"]))
+
+    if candidatos:
+        labels = [
+            f"{fase} · {with_flag(h)} vs {with_flag(a)} · {ko:%d/%m %H:%M} UTC"
+            for (fase, h, a, ko) in candidatos
+        ]
+        idx = st.selectbox(
+            "Partido del Mundial", range(len(labels)), format_func=lambda i: labels[i]
+        )
+        fase, p_home_team, p_away_team, _ = candidatos[idx]
+        st.caption(f"Fase: {fase}")
+    else:
+        st.info("No hay próximos partidos del fixture; elegí dos equipos.")
+        cc1, cc2 = st.columns(2)
+        p_home_team = cc1.selectbox(
+            "Equipo 1", teams, index=teams.index("Argentina"),
+            format_func=with_flag, key="prode_home",
+        )
+        p_away_team = cc2.selectbox(
+            "Equipo 2", teams, index=teams.index("Brazil"),
+            format_func=with_flag, key="prode_away",
+        )
+
+    report = build_match_report(get_poisson(), p_home_team, p_away_team, neutral=True)
+    pred = get_poisson().predict(p_home_team, p_away_team, neutral=True)
+
+    st.markdown(f"### {with_flag(p_home_team)} vs {with_flag(p_away_team)}")
+
+    pm1, pm2, pm3 = st.columns(3)
+    pm1.metric(with_flag(p_home_team), f"{report.p_home * 100:.1f}%", "gana")
+    pm2.metric("Empate", f"{report.p_draw * 100:.1f}%")
+    pm3.metric(with_flag(p_away_team), f"{report.p_away * 100:.1f}%", "gana")
+
+    st.markdown("**Goles esperados (xG)**")
+    st.altair_chart(
+        xg_bars(with_flag(p_home_team), with_flag(p_away_team), report.xg_home, report.xg_away),
+        width="stretch",
+    )
+
+    st.markdown("**Mapa de calor de marcadores**")
+    st.altair_chart(
+        scoreline_heatmap(pred.score_matrix, with_flag(p_home_team), with_flag(p_away_team)),
+        width="stretch",
+    )
+
+    st.markdown("**Marcadores más probables**")
+    for (i, j), p in top_scorelines(pred.score_matrix, 5):
+        st.markdown(
+            f"<div class='scoreline'>{with_flag(p_home_team)} <b>{i}–{j}</b> "
+            f"{with_flag(p_away_team)} · {p * 100:.1f}%</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("**Mercados derivados**")
+    st.altair_chart(markets_bars(report.btts, report.over25, report.over15), width="stretch")
+
+    st.markdown(
+        f"<div class='fav'>🃏 Conclusión del oráculo: {prode_verdict(report)}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -382,7 +491,7 @@ with tab_cup:
         '<p class="caption">Más sobres abiertos = más preciso pero más lento. Semilla fija.</p>',
         unsafe_allow_html=True,
     )
-    if c2.button("¡Abrí el sobre! 📦", use_container_width=True, type="primary"):
+    if c2.button("¡Abrí el sobre! 📦", width="stretch", type="primary"):
         with st.spinner(f"Abriendo {n_iter:,} sobres..."):
             probs = champion_probs(n_iter)
         ranking = sorted(get_config().teams, key=lambda t: probs[t]["Champion"], reverse=True)
@@ -407,12 +516,15 @@ with tab_cup:
         top = df.head(12)
         st.altair_chart(
             ranking_bar(top, value="Campeón", title="Probabilidad de campeón (%)"),
-            use_container_width=True,
+            width="stretch",
         )
+        st.markdown("**Camino al título (Semis / Final / Campeón)**")
+        prog = df.head(8)[["Equipo", "Semis", "Final", "Campeón"]]
+        st.altair_chart(progression_bars(prog), width="stretch")
         st.dataframe(
             df.style.format({"Campeón": "{:.1f}%", "Final": "{:.1f}%", "Semis": "{:.1f}%"}),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Elegí cuántos sobres abrir y apretá **¡Abrí el sobre! 📦**.")
@@ -457,7 +569,7 @@ with tab_bracket:
                         fav = f.home if pred.p_home >= pred.p_away else f.away
                         st.markdown(
                             f"<div class='scoreline'>🔮 {with_flag(f.home)} vs {with_flag(f.away)} "
-                            f"· favorito: <b>{fav}</b> "
+                            f"· favorito: <b>{display_name(fav)}</b> "
                             f"({max(pred.p_home, pred.p_away) * 100:.0f}%)</div>",
                             unsafe_allow_html=True,
                         )
@@ -499,7 +611,10 @@ with tab_verify:
         )
         if not cdf.empty:
             st.markdown("#### Calibración (P(gana local) predicha vs real)")
-            st.altair_chart(calibration_chart(cdf), use_container_width=True)
+            st.altair_chart(calibration_chart(cdf), width="stretch")
+        st.markdown("#### Evolución del acierto (RPS por partido)")
+        rps_df = pd.DataFrame([{"n": k + 1, "rps": s.rps} for k, s in enumerate(scores)])
+        st.altair_chart(rps_line(rps_df), width="stretch")
     else:
         st.info("Todavía no hay partidos jugados para verificar.")
 
@@ -520,7 +635,7 @@ with tab_verify:
         st.dataframe(
             mdf.style.format({"RPS": "{:.4f}", "Brier": "{:.4f}", "LogLoss": "{:.4f}"}),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Apretá **Revisar el álbum 📖** (tarda unos segundos la primera vez).")
