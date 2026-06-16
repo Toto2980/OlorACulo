@@ -4,7 +4,7 @@ import numpy as np
 
 from oraculo.match import Match
 from oraculo.evaluate.backtest import EvalResult
-from app.services import top_scorelines, model_comparison, prode_verdict
+from app.services import top_scorelines, model_comparison, prode_verdict, scoreline_hit
 from oraculo.report.match_report import MatchReport, Speculative
 
 
@@ -70,3 +70,27 @@ def test_prode_verdict_cruce_parejo_lo_dice():
 def test_prode_verdict_pocos_goles_cuando_over25_bajo():
     txt = prode_verdict(_report(0.70, 0.20, 0.10, over25=0.30))
     assert "pocos goles" in txt.lower()
+
+
+def _matrix_con(marcadores):
+    """marcadores: dict {(i,j): prob}. Devuelve matriz 11x11."""
+    m = np.zeros((11, 11))
+    for (i, j), p in marcadores.items():
+        m[i, j] = p
+    return m
+
+
+def test_scoreline_hit_true_cuando_el_real_esta_en_el_top_n():
+    m = _matrix_con({(1, 0): 0.5, (0, 0): 0.3, (2, 1): 0.2})
+    assert scoreline_hit(m, 1, 0, n=3) is True
+    assert scoreline_hit(m, 2, 1, n=3) is True
+
+
+def test_scoreline_hit_false_cuando_el_real_no_esta_en_el_top_n():
+    m = _matrix_con({(1, 0): 0.5, (0, 0): 0.3, (2, 1): 0.2})
+    assert scoreline_hit(m, 3, 3, n=3) is False
+
+
+def test_scoreline_hit_false_cuando_marcador_fuera_de_la_matriz():
+    m = _matrix_con({(1, 0): 1.0})
+    assert scoreline_hit(m, 20, 0, n=5) is False

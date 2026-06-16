@@ -29,6 +29,14 @@ def top_scorelines(matrix: np.ndarray, n: int = 5) -> list[tuple[tuple[int, int]
     return out
 
 
+def scoreline_hit(matrix, home_goals: int, away_goals: int, n: int = 5) -> bool:
+    """True si el marcador real (home_goals, away_goals) está entre los n marcadores
+    más probables de la matriz."""
+    return any(
+        i == home_goals and j == away_goals for (i, j), _ in top_scorelines(matrix, n)
+    )
+
+
 def model_comparison(
     matches: list[Match], eval_from: datetime.date
 ) -> dict[str, EvalResult]:
