@@ -39,6 +39,8 @@ def upcoming_rows(fixtures: list[Fixture], *, now: datetime.datetime) -> list[di
                 "id": f.id,
                 "fase": phase_label(f.stage),
                 "partido": _matchup(f),
+                "home": f.home,
+                "away": f.away,
                 "kickoff": f.kickoff_utc,
                 "estado": READINESS_LABEL[state],
                 "checks": verification_checks(f),

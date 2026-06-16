@@ -11,24 +11,26 @@ ROUNDS = ("R32", "R16", "QF", "SF", "Final", "Champion")
 
 
 def simulate_tournament(
-    model, config: WorldCupConfig, rng: np.random.Generator
+    model, config: WorldCupConfig, rng: np.random.Generator, *, known: dict | None = None
 ) -> dict[str, list[str]]:
     """Un torneo completo: fase de grupos -> cuadro -> eliminatorias.
-    Devuelve, por ronda, la lista de equipos que llegaron."""
-    gsr = simulate_group_stage(model, config, rng)
+    Devuelve, por ronda, la lista de equipos que llegaron.
+    `known`: dict {(home, away): (hg, ag)} con resultados ya jugados a respetar."""
+    gsr = simulate_group_stage(model, config, rng, known=known)
     r32_pairs = resolve_bracket(gsr)
-    return simulate_knockout(model, r32_pairs, rng)
+    return simulate_knockout(model, r32_pairs, rng, known=known)
 
 
 def run_tournament_mc(
-    model, config: WorldCupConfig, *, n_iter: int
+    model, config: WorldCupConfig, *, n_iter: int, known: dict | None = None
 ) -> dict[str, dict[str, float]]:
     """Corre n_iter torneos completos (semilla fija desde config.seed) y devuelve,
-    por equipo, P(llega a cada ronda) y P(campeón)."""
+    por equipo, P(llega a cada ronda) y P(campeón).
+    `known`: resultados ya jugados a respetar (no se muestrean)."""
     rng = np.random.default_rng(config.seed)
     counts = {team: {r: 0 for r in ROUNDS} for team in config.teams}
     for _ in range(n_iter):
-        rounds = simulate_tournament(model, config, rng)
+        rounds = simulate_tournament(model, config, rng, known=known)
         for r in ROUNDS:
             for team in rounds[r]:
                 counts[team][r] += 1

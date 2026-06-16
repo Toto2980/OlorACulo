@@ -16,8 +16,21 @@ def sample_scoreline(matrix: np.ndarray, rng: np.random.Generator) -> tuple[int,
     return idx // cols, idx % cols
 
 
-def simulate_match(model, home: str, away: str, rng: np.random.Generator, *, neutral: bool = True) -> tuple[int, int]:
-    """Predice con el modelo y muestrea un marcador concreto."""
+def simulate_match(
+    model,
+    home: str,
+    away: str,
+    rng: np.random.Generator,
+    *,
+    neutral: bool = True,
+    known: dict | None = None,
+) -> tuple[int, int]:
+    """Predice con el modelo y muestrea un marcador concreto. Si el partido ya se
+    jugó (está en `known` con clave (home, away)), usa el resultado real."""
+    if known is not None:
+        real = known.get((home, away))
+        if real is not None:
+            return real
     pred: MatchPrediction = model.predict(home, away, neutral=neutral)
     return sample_scoreline(pred.score_matrix, rng)
 
@@ -60,10 +73,10 @@ def rank_group(table: dict[str, TeamRecord], rng: np.random.Generator) -> list[T
     )
 
 
-def simulate_group(model, teams, rng: np.random.Generator) -> list[TeamRecord]:
+def simulate_group(model, teams, rng: np.random.Generator, *, known: dict | None = None) -> list[TeamRecord]:
     """Juega todos contra todos (cancha neutral) y devuelve los 4 equipos rankeados."""
     results = []
     for home, away in itertools.combinations(teams, 2):
-        hg, ag = simulate_match(model, home, away, rng, neutral=True)
+        hg, ag = simulate_match(model, home, away, rng, neutral=True, known=known)
         results.append((home, away, hg, ag))
     return rank_group(compute_standings(teams, results), rng)

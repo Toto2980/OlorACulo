@@ -7,11 +7,16 @@ from oraculo.tournament.group import sample_scoreline
 _KNOCKOUT_ROUNDS = ("R16", "QF", "SF", "Final", "Champion")
 
 
-def knockout_winner(model, home: str, away: str, rng: np.random.Generator) -> str:
+def knockout_winner(model, home: str, away: str, rng: np.random.Generator, *, known: dict | None = None) -> str:
     """Simula un partido de eliminación (neutral). Empate -> penales ponderados
-    por la fuerza relativa del modelo (p_local / (p_local + p_visit))."""
+    por la fuerza relativa del modelo (p_local / (p_local + p_visit)).
+    Si el cruce ya se jugó (en `known`) y no fue empate, usa el resultado real."""
     pred = model.predict(home, away, neutral=True)
-    hg, ag = sample_scoreline(pred.score_matrix, rng)
+    real = known.get((home, away)) if known is not None else None
+    if real is not None:
+        hg, ag = real
+    else:
+        hg, ag = sample_scoreline(pred.score_matrix, rng)
     if hg > ag:
         return home
     if ag > hg:
@@ -21,13 +26,13 @@ def knockout_winner(model, home: str, away: str, rng: np.random.Generator) -> st
     return home if rng.random() < p_home_pens else away
 
 
-def simulate_knockout(model, r32_pairs, rng: np.random.Generator) -> dict[str, list[str]]:
+def simulate_knockout(model, r32_pairs, rng: np.random.Generator, *, known: dict | None = None) -> dict[str, list[str]]:
     """Simula el cuadro completo desde 32avos. Devuelve, por ronda, la lista de
     equipos que LLEGARON a esa instancia. Claves: R32, R16, QF, SF, Final, Champion."""
     rounds: dict[str, list[str]] = {"R32": [team for pair in r32_pairs for team in pair]}
     pairs = list(r32_pairs)
     for name in _KNOCKOUT_ROUNDS:
-        winners = [knockout_winner(model, home, away, rng) for home, away in pairs]
+        winners = [knockout_winner(model, home, away, rng, known=known) for home, away in pairs]
         rounds[name] = winners
         if len(winners) == 1:
             break

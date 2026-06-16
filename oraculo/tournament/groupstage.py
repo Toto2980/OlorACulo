@@ -16,7 +16,7 @@ class GroupStageResult:
 
 
 def simulate_group_stage(
-    model, config: WorldCupConfig, rng: np.random.Generator
+    model, config: WorldCupConfig, rng: np.random.Generator, *, known: dict | None = None
 ) -> GroupStageResult:
     """Simula los 12 grupos; avanzan 1º y 2º de cada uno + los 8 mejores terceros."""
     standings: dict[str, list[TeamRecord]] = {}
@@ -24,7 +24,7 @@ def simulate_group_stage(
     thirds: list[TeamRecord] = []
 
     for group, teams in config.groups.items():
-        ranked = simulate_group(model, teams, rng)
+        ranked = simulate_group(model, teams, rng, known=known)
         standings[group] = ranked
         advancing.add(ranked[0].team)
         advancing.add(ranked[1].team)
