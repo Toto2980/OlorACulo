@@ -27,6 +27,8 @@ def test_upcoming_rows_excludes_finished():
     assert 1002 in ids            # SCHEDULED futuro
     # cada fila trae estado de readiness legible
     assert all("estado" in r for r in rows)
+    # y los equipos por separado para mostrarlos traducidos
+    assert all("home" in r and "away" in r for r in rows)
 
 
 def test_finished_rows_only_finished():

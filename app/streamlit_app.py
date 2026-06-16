@@ -272,7 +272,12 @@ with tab_live:
             st.caption("No hay próximos partidos cargados.")
         for r in upcoming:
             cols = st.columns([4, 3, 3])
-            cols[0].markdown(f"**{r['partido']}**  ·  _{r['fase']}_")
+            partido_es = (
+                f"{with_flag(r['home'])} vs {with_flag(r['away'])}"
+                if r["home"] and r["away"]
+                else r["partido"]
+            )
+            cols[0].markdown(f"**{partido_es}**  ·  _{r['fase']}_")
             cols[1].markdown(f"🕒 {r['kickoff']:%d/%m %H:%M} UTC")
             cols[2].markdown(f"🔖 {r['estado']}")
             ok = sum(c.ok for c in r["checks"])
@@ -407,17 +412,12 @@ with tab_prode:
     except LiveDataError:
         fixtures = []
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    proximos = (
-        [r for r in upcoming_rows(fixtures, now=now) if "vs" in r["partido"]]
-        if fixtures
-        else []
-    )
+    proximos = upcoming_rows(fixtures, now=now) if fixtures else []
     # Solo cruces con ambos equipos definidos y conocidos por el modelo.
     candidatos = []
     for r in proximos:
-        partes = r["partido"].split(" vs ")
-        if len(partes) == 2 and partes[0] in teams and partes[1] in teams:
-            candidatos.append((r["fase"], partes[0], partes[1], r["kickoff"]))
+        if r["home"] in teams and r["away"] in teams:
+            candidatos.append((r["fase"], r["home"], r["away"], r["kickoff"]))
 
     if candidatos:
         labels = [
