@@ -20,7 +20,7 @@ from oraculo.models.elo import EloModel
 from oraculo.models.poisson import PoissonConfig, PoissonModel
 from oraculo.tournament.config import load_config
 from oraculo.tournament.tournament import run_tournament_mc
-from app.services import top_scorelines, model_comparison, prode_verdict
+from app.services import top_scorelines, model_comparison, prode_verdict, scoreline_hit
 from app.flags import with_flag, display_name
 
 import os
@@ -102,8 +102,30 @@ def get_fixtures():
 
 
 @st.cache_data
-def champion_probs(n_iter: int):
-    return run_tournament_mc(get_poisson(), get_config(), n_iter=n_iter)
+def champion_probs(n_iter: int, known_items: tuple = ()):
+    """known_items: tupla hashable de (home, away, hg, ag) de partidos ya jugados.
+    Se respetan en la simulación (no se muestrean)."""
+    known: dict = {}
+    for h, a, hg, ag in known_items:
+        known[(h, a)] = (hg, ag)
+        known[(a, h)] = (ag, hg)
+    return run_tournament_mc(
+        get_poisson(), get_config(), n_iter=n_iter, known=known or None
+    )
+
+
+def _played_known_items():
+    """Resultados ya jugados del Mundial (solo equipos del torneo), como tupla hashable."""
+    try:
+        fx, _ = get_fixtures()
+    except LiveDataError:
+        return ()
+    teamset = set(get_config().teams)
+    return tuple(
+        (r["home"], r["away"], r["home_goals"], r["away_goals"])
+        for r in finished_rows(fx)
+        if r["home"] in teamset and r["away"] in teamset
+    )
 
 
 @st.cache_data
@@ -491,9 +513,16 @@ with tab_cup:
         '<p class="caption">Más sobres abiertos = más preciso pero más lento. Semilla fija.</p>',
         unsafe_allow_html=True,
     )
+    usar_jugados = st.toggle(
+        "Tener en cuenta los partidos ya jugados", value=True,
+        help="Fija los resultados reales del Mundial y simula solo lo que falta.",
+    )
+    known_items = _played_known_items() if usar_jugados else ()
+    if usar_jugados:
+        st.caption(f"Partidos reales ya incorporados: {len(known_items)}")
     if c2.button("¡Abrí el sobre! 📦", width="stretch", type="primary"):
         with st.spinner(f"Abriendo {n_iter:,} sobres..."):
-            probs = champion_probs(n_iter)
+            probs = champion_probs(n_iter, known_items)
         ranking = sorted(get_config().teams, key=lambda t: probs[t]["Champion"], reverse=True)
         fav = ranking[0]
         st.markdown(
@@ -559,10 +588,20 @@ with tab_bracket:
                     if f.is_finished:
                         s = score_match(f.id, pred.probs, f.home_goals, f.away_goals)
                         mark = "✅" if s.hit else "❌"
+                        top5 = top_scorelines(pred.score_matrix, 5)
+                        if scoreline_hit(pred.score_matrix, f.home_goals, f.away_goals, n=5):
+                            puesto = next(
+                                k for k, ((i, j), _) in enumerate(top5, start=1)
+                                if i == f.home_goals and j == f.away_goals
+                            )
+                            marcador_txt = f"🎯 marcador entre los probables (#{puesto})"
+                        else:
+                            (pi, pj), _ = top5[0]
+                            marcador_txt = f"marcador fuera del top-5 (más probable {pi}–{pj})"
                         st.markdown(
                             f"<div class='scoreline'>{mark} {with_flag(f.home)} "
                             f"<b>{f.home_goals}–{f.away_goals}</b> {with_flag(f.away)} "
-                            f"· predicho {s.outcome_pred}</div>",
+                            f"· predicho {s.outcome_pred} · {marcador_txt}</div>",
                             unsafe_allow_html=True,
                         )
                     else:
