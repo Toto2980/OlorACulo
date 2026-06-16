@@ -8,3 +8,4 @@ data/*.db
 .streamlit/secrets.toml
 data/cache/
 data/predictions_log.json
+.superpowers/
