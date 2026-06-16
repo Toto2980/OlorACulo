@@ -27,9 +27,17 @@ DATA = ROOT / "data" / "results.csv"
 WC = ROOT / "data" / "wc2026.yaml"
 EVAL_FROM = datetime.date(2010, 1, 1)
 
-ACCENT = "#00C2A8"
-ACCENT_2 = "#F4B740"
-MUTED = "#8A94A6"
+# Paleta "Álbum '86" — figuritas Panini
+GREEN = "#3c7a4e"      # verde césped vintage
+GREEN_DK = "#2a6b3e"
+ORANGE = "#e8a33d"     # naranja mostaza
+RED = "#e84f3d"        # rojo figurita
+INK = "#2b2b2b"
+MUTED = "#c9bfa3"      # tan apagado (empate / neutro)
+
+ACCENT = GREEN
+ACCENT_2 = ORANGE
+LABEL = INK
 
 
 # --------------------------------------------------------------------------- #
@@ -67,41 +75,120 @@ def model_metrics():
 
 
 # --------------------------------------------------------------------------- #
-# Estilo
+# Estilo — álbum de figuritas
 # --------------------------------------------------------------------------- #
-st.set_page_config(page_title="OlorACulo — Mundial 2026", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="OlorACulo — Álbum Mundial 2026", page_icon="⚽", layout="wide")
 
 st.markdown(
     """
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@400;500;600;700&display=swap');
+
       #MainMenu, footer, header {visibility: hidden;}
-      .block-container {padding-top: 1.5rem; max-width: 1180px;}
+
+      /* Fondo crema con textura de puntitos (papel de álbum) */
+      .stApp {
+        background-color: #f7e9cf;
+        background-image: radial-gradient(#e7d4a9 1.3px, transparent 1.3px);
+        background-size: 20px 20px;
+      }
+      html, body, [class*="css"], .stMarkdown, p, div, span, label {
+        font-family: 'Fredoka', sans-serif;
+      }
+      .block-container {padding-top: 1.4rem; max-width: 1180px;}
+
+      h1, h2, h3 {
+        font-family: 'Bungee', sans-serif !important;
+        color: #2a6b3e !important; letter-spacing: .5px;
+      }
+
+      /* Hero: logo tipo sticker rojo pegado */
       .hero {
-        background: linear-gradient(135deg, #0b3d2e 0%, #0e7a5f 55%, #00c2a8 130%);
-        border-radius: 18px; padding: 26px 32px; margin-bottom: 22px;
-        box-shadow: 0 10px 30px rgba(0,0,0,.35);
+        background: #ffffff; border-radius: 20px; padding: 24px 30px;
+        margin-bottom: 24px; position: relative; overflow: hidden;
+        border: 3px solid #ffffff;
+        box-shadow: 0 6px 0 rgba(0,0,0,.10), 0 12px 26px rgba(0,0,0,.12);
       }
-      .hero h1 {color: #fff; margin: 0; font-size: 2.2rem; letter-spacing: -.5px;}
-      .hero p {color: #cdeede; margin: .35rem 0 0; font-size: 1.02rem;}
-      .pill {display:inline-block; background: rgba(255,255,255,.14); color:#eafff8;
-        padding: 2px 12px; border-radius: 999px; font-size:.78rem; margin-top:10px;}
+      .logo-sticker {
+        display: inline-block; font-family: 'Bungee', sans-serif;
+        font-size: 2.3rem; color: #fff; background: #e84f3d;
+        padding: 8px 22px; border-radius: 14px; letter-spacing: 2px;
+        border: 4px solid #fff; transform: rotate(-2deg);
+        box-shadow: 0 0 0 3px #e84f3d, 0 5px 12px rgba(0,0,0,.28);
+      }
+      .hero p {
+        font-family: 'Fredoka', sans-serif; font-weight: 600;
+        color: #3c7a4e; font-size: 1.1rem; margin: 1rem 0 0;
+      }
+      .pill {
+        display: inline-block; background: #3c7a4e; color: #fff;
+        padding: 4px 14px; border-radius: 999px; font-size: .8rem;
+        font-weight: 600; margin-top: 12px;
+      }
+
+      /* Métricas = figuritas con borde punteado y tilt */
       div[data-testid="stMetric"] {
-        background: #161B26; border: 1px solid #232a39; border-radius: 14px;
-        padding: 14px 16px;
+        background: #fffdf7; border: 3px dashed #e8a33d; border-radius: 16px;
+        padding: 16px 18px; box-shadow: 0 5px 10px rgba(0,0,0,.08);
+        transition: transform .15s ease;
       }
-      .stTabs [data-baseweb="tab-list"] {gap: 6px;}
+      [data-testid="column"]:nth-child(odd) div[data-testid="stMetric"]  {transform: rotate(-1.6deg);}
+      [data-testid="column"]:nth-child(even) div[data-testid="stMetric"] {transform: rotate(1.6deg);}
+      div[data-testid="stMetric"]:hover {transform: rotate(0deg) scale(1.03);}
+      [data-testid="stMetricValue"] {
+        font-family: 'Bungee', sans-serif !important; color: #e84f3d !important;
+        font-size: 1.85rem !important;
+      }
+      [data-testid="stMetricLabel"] p {
+        font-family: 'Fredoka', sans-serif !important; font-weight: 600 !important;
+        color: #2a6b3e !important;
+      }
+
+      /* Tabs = solapas de cartón del álbum */
+      .stTabs [data-baseweb="tab-list"] {gap: 8px; border-bottom: 3px solid #2a6b3e;}
       .stTabs [data-baseweb="tab"] {
-        background:#161B26; border-radius: 10px 10px 0 0; padding: 8px 18px;
+        background: #fbe7c8; border: 2px solid #d9b876; border-bottom: none;
+        border-radius: 14px 14px 0 0; padding: 8px 20px;
+        font-weight: 600; color: #7a6a3a;
       }
-      .stTabs [aria-selected="true"] {background:#1f2735; color:#fff;}
-      .caption {color:#8A94A6; font-size:.85rem;}
-      .fav {background: linear-gradient(135deg,#13322a,#0e7a5f); border:1px solid #1f6e58;
-        border-radius:14px; padding:14px 18px; font-size:1.15rem; color:#eafff8; margin-bottom:14px;}
-      .verdict {background:#161B26; border:1px solid #232a39; border-left:4px solid #00C2A8;
-        border-radius:10px; padding:10px 16px; margin:4px 0 14px; color:#E6E9EF;}
-      .footer {text-align:center; color:#5d6675; font-size:.8rem; margin-top:38px;
-        padding-top:14px; border-top:1px solid #232a39;}
-      .footer a {color:#00C2A8; text-decoration:none;}
+      .stTabs [aria-selected="true"] {
+        background: #e8a33d !important; color: #fff !important; border-color: #e8a33d;
+      }
+
+      /* Botones chunky */
+      .stButton > button {
+        font-family: 'Bungee', sans-serif !important; border-radius: 14px !important;
+        letter-spacing: .5px; border: 2px solid #d9b876 !important; color: #7a6a3a;
+      }
+      .stButton > button[kind="primary"] {
+        background: #e84f3d !important; color: #fff !important;
+        border: 3px solid #fff !important;
+        box-shadow: 0 0 0 2px #e84f3d, 0 4px 9px rgba(0,0,0,.22) !important;
+      }
+
+      /* Veredicto = figurita destacada */
+      .verdict {
+        background: #fffdf7; border: 3px dashed #3c7a4e; border-radius: 14px;
+        padding: 12px 18px; margin: 6px 0 16px; color: #2a6b3e;
+        font-weight: 600; font-size: 1.06rem;
+      }
+      /* Favorito = figu dorada */
+      .fav {
+        background: #fff8e8; border: 4px solid #e8a33d; border-radius: 18px;
+        padding: 18px 24px; font-weight: 600; font-size: 1.25rem;
+        color: #2a6b3e; margin-bottom: 18px; transform: rotate(-1.2deg);
+        box-shadow: 0 6px 0 rgba(232,163,61,.35);
+      }
+      .scoreline {
+        background: #fffdf7; border: 2px solid #e7d4a9; border-radius: 10px;
+        padding: 6px 12px; margin: 5px 0; font-weight: 500;
+      }
+      .caption {color: #8a857a; font-size: .86rem; font-weight: 500;}
+      .footer {
+        text-align: center; color: #8a857a; font-size: .82rem; font-weight: 500;
+        margin-top: 42px; padding-top: 16px; border-top: 3px dashed #d9b876;
+      }
+      .footer a {color: #e84f3d; font-weight: 600; text-decoration: none;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -110,9 +197,9 @@ st.markdown(
 st.markdown(
     """
     <div class="hero">
-      <h1>⚽ OlorACulo</h1>
-      <p>Predictor del Mundial 2026 — del oloráculo inútil al Monte Carlo, por niveles.</p>
-      <span class="pill">Modelo Poisson · Dixon-Coles · 49.000 partidos de historia</span>
+      <span class="logo-sticker">⚽ OLORÁCULO</span>
+      <p>¡Pegá tu figurita del Mundial 2026! 📒</p>
+      <span class="pill">Modelo Poisson · Dixon-Coles · 49.000 partidos de archivo</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -129,7 +216,7 @@ tab_match, tab_cup, tab_teams, tab_metrics = st.tabs(
 # Vista: Analizar partido
 # --------------------------------------------------------------------------- #
 with tab_match:
-    st.subheader("Analizar un partido")
+    st.subheader("Analizá un partido")
     c1, c2, c3 = st.columns([3, 3, 2])
     home = c1.selectbox("Equipo 1", teams, index=teams.index("Argentina"), format_func=with_flag)
     away = c2.selectbox("Equipo 2", teams, index=teams.index("Brazil"), format_func=with_flag)
@@ -147,7 +234,7 @@ with tab_match:
     options = {f"Gana {home}": pred.p_home, "Empate": pred.p_draw, f"Gana {away}": pred.p_away}
     best = max(options, key=options.get)
     st.markdown(
-        f"<div class='verdict'>Resultado más probable: <b>{best}</b> · {options[best] * 100:.0f}%</div>",
+        f"<div class='verdict'>🃏 Figurita más probable: <b>{best}</b> · {options[best] * 100:.0f}%</div>",
         unsafe_allow_html=True,
     )
 
@@ -188,28 +275,32 @@ with tab_match:
         with right:
             st.markdown("**Marcadores más probables**")
             for (i, j), p in top_scorelines(pred.score_matrix, 5):
-                st.markdown(f"{with_flag(home)} **{i}–{j}** {with_flag(away)} · `{p * 100:.1f}%`")
+                st.markdown(
+                    f"<div class='scoreline'>{with_flag(home)} <b>{i}–{j}</b> {with_flag(away)} "
+                    f"· {p * 100:.1f}%</div>",
+                    unsafe_allow_html=True,
+                )
 
 
 # --------------------------------------------------------------------------- #
 # Vista: Predicción del Mundial
 # --------------------------------------------------------------------------- #
 with tab_cup:
-    st.subheader("Predicción del Mundial 2026")
+    st.subheader("El sobre del Mundial 2026")
     c1, c2 = st.columns([3, 1])
     n_iter = c1.slider("Simulaciones", 200, 10000, 2000, step=200)
     st.markdown(
-        '<p class="caption">Más simulaciones = más preciso pero más lento. Semilla fija.</p>',
+        '<p class="caption">Más sobres abiertos = más preciso pero más lento. Semilla fija.</p>',
         unsafe_allow_html=True,
     )
-    if c2.button("Simular 🏆", use_container_width=True, type="primary"):
-        with st.spinner(f"Corriendo {n_iter:,} torneos..."):
+    if c2.button("¡Abrí el sobre! 📦", use_container_width=True, type="primary"):
+        with st.spinner(f"Abriendo {n_iter:,} sobres..."):
             probs = champion_probs(n_iter)
         ranking = sorted(get_config().teams, key=lambda t: probs[t]["Champion"], reverse=True)
         fav = ranking[0]
         st.markdown(
-            f"<div class='fav'>🏆 Favorito: <b>{with_flag(fav)}</b> · "
-            f"{probs[fav]['Champion'] * 100:.1f}% de chances de campeón</div>",
+            f"<div class='fav'>🏅 La figu dorada es para <b>{with_flag(fav)}</b> · "
+            f"{probs[fav]['Champion'] * 100:.1f}% de ser campeón</div>",
             unsafe_allow_html=True,
         )
         medals = {0: "🥇", 1: "🥈", 2: "🥉"}
@@ -234,7 +325,7 @@ with tab_cup:
                 tooltip=[alt.Tooltip("Campeón:Q", format=".1f")],
             )
         )
-        labels = bars.mark_text(align="left", dx=4, color="#E6E9EF").encode(
+        labels = bars.mark_text(align="left", dx=4, color=LABEL, fontWeight="bold").encode(
             text=alt.Text("Campeón:Q", format=".1f")
         )
         st.altair_chart((bars + labels).properties(height=420), use_container_width=True)
@@ -244,14 +335,14 @@ with tab_cup:
             use_container_width=True,
         )
     else:
-        st.info("Elegí la cantidad de simulaciones y apretá **Simular 🏆**.")
+        st.info("Elegí cuántos sobres abrir y apretá **¡Abrí el sobre! 📦**.")
 
 
 # --------------------------------------------------------------------------- #
 # Vista: Comparar equipos
 # --------------------------------------------------------------------------- #
 with tab_teams:
-    st.subheader("Comparar equipos")
+    st.subheader("Comparar figuritas")
     sel = st.multiselect(
         "Equipos", teams, default=["Argentina", "Brazil", "France", "Spain"], format_func=with_flag
     )
@@ -289,13 +380,13 @@ with tab_teams:
 # Vista: Métricas del modelo
 # --------------------------------------------------------------------------- #
 with tab_metrics:
-    st.subheader("Métricas del modelo")
+    st.subheader("¿Qué tan buena es la figu?")
     st.markdown(
         '<p class="caption">Backtest walk-forward desde 2010. RPS más bajo = mejor. '
         'La <b>vara</b> es el modelo uniforme; cada nivel debe bajarla.</p>',
         unsafe_allow_html=True,
     )
-    if st.button("Calcular métricas", type="primary"):
+    if st.button("Revisar el álbum 📖", type="primary"):
         with st.spinner("Backtesteando uniforme, Elo y Poisson..."):
             metrics = model_metrics()
         df = pd.DataFrame([{"Modelo": k, **v} for k, v in metrics.items()]).sort_values("RPS")
@@ -319,11 +410,11 @@ with tab_metrics:
             use_container_width=True,
         )
     else:
-        st.info("Apretá **Calcular métricas** (tarda unos segundos la primera vez).")
+        st.info("Apretá **Revisar el álbum 📖** (tarda unos segundos la primera vez).")
 
 
 st.markdown(
-    "<div class='footer'>OlorACulo · datos: martj42/international_results · "
+    "<div class='footer'>OlorACulo · álbum del Mundial 2026 · datos: martj42/international_results · "
     "modelo Poisson + Dixon-Coles · "
     "<a href='https://github.com/Toto2980/OlorACulo' target='_blank'>código en GitHub</a></div>",
     unsafe_allow_html=True,
