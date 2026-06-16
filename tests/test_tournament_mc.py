@@ -48,3 +48,22 @@ def test_mc_deterministic_with_seed():
     a = run_tournament_mc(_FakeModel(), _config(), n_iter=100)
     b = run_tournament_mc(_FakeModel(), _config(), n_iter=100)
     assert a == b
+
+
+def test_known_results_condicionan_la_fase_de_grupos():
+    """Con resultados ya jugados, esos partidos no se muestrean: si T0 le gana a
+    todo su grupo, avanza siempre (P(R32)=1)."""
+    cfg = _config()
+    known = {}
+    for opp in ("T1", "T2", "T3"):
+        known[("T0", opp)] = (5, 0)
+        known[(opp, "T0")] = (0, 5)
+    probs = run_tournament_mc(_FakeModel(), cfg, n_iter=50, known=known)
+    assert probs["T0"]["R32"] == 1.0
+
+
+def test_known_vacio_equivale_a_sin_condicionar():
+    cfg = _config()
+    base = run_tournament_mc(_FakeModel(), cfg, n_iter=80)
+    con_known = run_tournament_mc(_FakeModel(), cfg, n_iter=80, known={})
+    assert base == con_known
