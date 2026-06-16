@@ -31,6 +31,13 @@ def _model():
     return PoissonModel(PoissonConfig(lr=0.05)).fit(matches)
 
 
+def test_build_match_report_incluye_over15_y_es_mayor_que_over25():
+    r = build_match_report(_model(), "Argentina", "Brazil", neutral=True)
+    assert 0.0 <= r.over15 <= 1.0
+    # P(total > 1.5) siempre >= P(total > 2.5)
+    assert r.over15 >= r.over25
+
+
 def test_build_match_report_shape():
     r = build_match_report(_model(), "Argentina", "Brazil", neutral=True)
     assert isinstance(r, MatchReport)

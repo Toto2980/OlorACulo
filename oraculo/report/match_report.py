@@ -26,6 +26,7 @@ class MatchReport:
     top_scores: list[tuple[tuple[int, int], float]]
     btts: float
     over25: float
+    over15: float
     speculative: Speculative
 
 
@@ -73,6 +74,7 @@ def build_match_report(model, home: str, away: str, *, neutral: bool = True) -> 
         top_scores=top_scorelines(matrix, 5),
         btts=btts_prob(matrix),
         over25=over_prob(matrix, 2.5),
+        over15=over_prob(matrix, 1.5),
         speculative=Speculative(
             top_scorer_team=top_scorer,
             cards_band=_cards_band(pred.p_home, pred.p_draw, pred.p_away),
