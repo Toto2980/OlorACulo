@@ -52,7 +52,7 @@ def upcoming_rows(fixtures: list[Fixture], *, now: datetime.datetime) -> list[di
 def finished_rows(fixtures: list[Fixture]) -> list[dict]:
     rows: list[dict] = []
     for f in sorted(fixtures, key=lambda x: x.kickoff_utc):
-        if not f.is_finished:
+        if not f.has_score:
             continue
         rows.append(
             {

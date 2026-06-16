@@ -61,6 +61,12 @@ class Fixture:
         return self.status == "FINISHED"
 
     @property
+    def has_score(self) -> bool:
+        """Finalizado Y con marcador numérico. La API puede dar un partido
+        FINISHED/AWARDED con fullTime null; en ese caso no hay marcador que puntuar."""
+        return self.is_finished and self.home_goals is not None and self.away_goals is not None
+
+    @property
     def resolved(self) -> bool:
         return self.home is not None and self.away is not None
 

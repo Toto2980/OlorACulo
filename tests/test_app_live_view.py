@@ -2,8 +2,16 @@ import datetime
 import json
 from pathlib import Path
 
-from oraculo.live.fixtures import parse_fixtures
+from oraculo.live.fixtures import Fixture, parse_fixtures
 from app.live_view import group_by_phase, upcoming_rows, finished_rows
+
+
+def _fixture(fid, status, hg, ag):
+    return Fixture(
+        id=fid, stage="GROUP_STAGE", group="A", home="Argentina", away="Brazil",
+        kickoff_utc=datetime.datetime(2026, 6, 16, tzinfo=datetime.timezone.utc),
+        status=status, home_goals=hg, away_goals=ag,
+    )
 
 SAMPLE = Path(__file__).parent / "fixtures" / "wc_matches_sample.json"
 NOW = datetime.datetime(2026, 6, 15, 12, 0, tzinfo=datetime.timezone.utc)
@@ -35,3 +43,12 @@ def test_finished_rows_only_finished():
     rows = finished_rows(_fixtures())
     assert [r["id"] for r in rows] == [1001]
     assert rows[0]["marcador"] == "2–0"
+
+
+def test_finished_rows_excluye_finalizados_sin_marcador():
+    """Un partido FINISHED/AWARDED sin goles no debe entrar (rompería el scoring)."""
+    rows = finished_rows([
+        _fixture(1, "FINISHED", 2, 1),
+        _fixture(2, "FINISHED", None, None),
+    ])
+    assert [r["id"] for r in rows] == [1]
