@@ -16,7 +16,9 @@
 
 ## FASE L0 — Preparación
 
-### Task 1: Confirmar cobertura de la API (exploratorio, sin código de producción)
+> **✅ RESULTADO Task 1 (confirmado 2026-06-16):** football-data.org free tier **SÍ cubre** el Mundial 2026 (`/competitions/WC`): 48 equipos, 104 partidos, temporada 2026, fases `GROUP_STAGE, LAST_32, LAST_16, QUARTER_FINALS, SEMI_FINALS, THIRD_PLACE, FINAL`. Status reales: `TIMED/IN_PLAY/PAUSED/FINISHED/POSTPONED` (→ normalizados en `fixtures.normalize_status`). Solo 4 nombres difieren del dataset (ver `_OVERRIDES` en Task 4). Cruces de eliminatorias vienen con `homeTeam.name=null` hasta definirse. **No hace falta fallback a API-Football.** Task 1 ya ejecutada.
+
+### Task 1: Confirmar cobertura de la API (exploratorio, sin código de producción) — ✅ HECHA
 
 **Objetivo:** Verificar que el free tier de football-data.org cubra el Mundial 2026 antes de escribir el cliente.
 
@@ -99,35 +101,35 @@ git commit -m "chore: esqueleto de paquetes live/report/verify + secrets example
 
 - [ ] **Step 1: Crear el JSON de ejemplo (forma football-data.org)**
 
-Crear `tests/fixtures/wc_matches_sample.json`:
+Crear `tests/fixtures/wc_matches_sample.json` (forma e ids reales confirmados en Task 1; nombres y status tal cual los devuelve football-data.org):
 ```json
 {
   "matches": [
     {
-      "id": 1001,
-      "utcDate": "2026-06-12T19:00:00Z",
+      "id": 537327,
+      "utcDate": "2026-06-11T19:00:00Z",
       "status": "FINISHED",
-      "stage": "GROUP_STAGE",
-      "group": "GROUP_J",
-      "homeTeam": {"name": "Argentina"},
-      "awayTeam": {"name": "Algeria"},
-      "score": {"fullTime": {"home": 2, "away": 0}}
-    },
-    {
-      "id": 1002,
-      "utcDate": "2026-06-20T22:00:00Z",
-      "status": "SCHEDULED",
       "stage": "GROUP_STAGE",
       "group": "GROUP_A",
       "homeTeam": {"name": "Mexico"},
-      "awayTeam": {"name": "Korea Republic"},
+      "awayTeam": {"name": "South Africa"},
+      "score": {"fullTime": {"home": 2, "away": 0}}
+    },
+    {
+      "id": 537328,
+      "utcDate": "2026-06-12T02:00:00Z",
+      "status": "TIMED",
+      "stage": "GROUP_STAGE",
+      "group": "GROUP_A",
+      "homeTeam": {"name": "South Korea"},
+      "awayTeam": {"name": "Czechia"},
       "score": {"fullTime": {"home": null, "away": null}}
     },
     {
-      "id": 1003,
-      "utcDate": "2026-07-10T22:00:00Z",
-      "status": "SCHEDULED",
-      "stage": "SEMI_FINALS",
+      "id": 537417,
+      "utcDate": "2026-06-28T19:00:00Z",
+      "status": "TIMED",
+      "stage": "LAST_32",
       "group": null,
       "homeTeam": {"name": null},
       "awayTeam": {"name": null},
@@ -145,7 +147,7 @@ import datetime
 import json
 from pathlib import Path
 
-from oraculo.live.fixtures import Fixture, parse_fixtures, phase_label
+from oraculo.live.fixtures import Fixture, parse_fixtures, phase_label, normalize_status
 
 SAMPLE = Path(__file__).parent / "fixtures" / "wc_matches_sample.json"
 
@@ -161,31 +163,43 @@ def test_parse_returns_fixture_per_match():
 
 
 def test_parse_finished_match_has_score_and_outcome():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 1001)
-    assert f.home == "Argentina"
-    assert f.away == "Algeria"
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537327)
+    assert f.home == "Mexico"
+    assert f.away == "South Africa"
     assert f.status == "FINISHED"
     assert f.is_finished
     assert (f.home_goals, f.away_goals) == (2, 0)
-    assert f.kickoff_utc == datetime.datetime(2026, 6, 12, 19, 0, tzinfo=datetime.timezone.utc)
+    assert f.kickoff_utc == datetime.datetime(2026, 6, 11, 19, 0, tzinfo=datetime.timezone.utc)
 
 
-def test_parse_canonicalizes_names():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 1002)
-    # "Korea Republic" (API) -> "South Korea" (canónico del dataset)
-    assert f.away == "South Korea"
+def test_parse_canonicalizes_names_and_normalizes_status():
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537328)
+    # "Czechia" (API) -> "Czech Republic" (canónico del dataset)
+    assert f.away == "Czech Republic"
+    assert f.home == "South Korea"   # la API ya usa este nombre
     assert f.group == "A"
+    assert f.status == "SCHEDULED"   # normalizado desde "TIMED"
     assert f.home_goals is None
 
 
 def test_parse_unresolved_teams_become_none():
-    f = next(f for f in parse_fixtures(_raw()) if f.id == 1003)
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 537417)
     assert f.home is None and f.away is None
-    assert f.stage == "SEMI_FINALS"
+    assert f.stage == "LAST_32"
+    assert not f.resolved
+
+
+def test_normalize_status_maps_api_vocabulary():
+    assert normalize_status("TIMED") == "SCHEDULED"
+    assert normalize_status("IN_PLAY") == "LIVE"
+    assert normalize_status("PAUSED") == "LIVE"
+    assert normalize_status("FINISHED") == "FINISHED"
+    assert normalize_status("POSTPONED") == "POSTPONED"
 
 
 def test_phase_label_maps_stages():
     assert phase_label("GROUP_STAGE") == "Grupos"
+    assert phase_label("LAST_32") == "16vos"
     assert phase_label("LAST_16") == "8vos"
     assert phase_label("FINAL") == "Final"
 ```
@@ -222,9 +236,26 @@ PHASE_ORDER: tuple[str, ...] = (
     "GROUP_STAGE", "LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL",
 )
 
+# Vocabulario de status real de football-data.org -> 4 estados canónicos de OlorACulo.
+_STATUS_MAP: dict[str, str] = {
+    "FINISHED": "FINISHED",
+    "AWARDED": "FINISHED",
+    "IN_PLAY": "LIVE",
+    "PAUSED": "LIVE",
+    "SCHEDULED": "SCHEDULED",
+    "TIMED": "SCHEDULED",
+    "POSTPONED": "POSTPONED",
+    "SUSPENDED": "POSTPONED",
+    "CANCELLED": "POSTPONED",
+}
+
 
 def phase_label(stage: str) -> str:
     return PHASE_LABELS.get(stage, stage)
+
+
+def normalize_status(raw: str) -> str:
+    return _STATUS_MAP.get(raw, "SCHEDULED")
 
 
 @dataclass(frozen=True)
@@ -277,7 +308,7 @@ def parse_fixtures(raw: dict) -> list[Fixture]:
                 home=_name(m.get("homeTeam")),
                 away=_name(m.get("awayTeam")),
                 kickoff_utc=_parse_dt(m["utcDate"]),
-                status=str(m.get("status", "SCHEDULED")),
+                status=normalize_status(str(m.get("status", "SCHEDULED"))),
                 home_goals=ft.get("home"),
                 away_goals=ft.get("away"),
             )
@@ -311,13 +342,15 @@ WC = Path(__file__).resolve().parent.parent / "data" / "wc2026.yaml"
 
 
 def test_known_api_spellings_map_to_canonical():
-    assert to_canonical("Korea Republic") == "South Korea"
-    assert to_canonical("USA") == "United States"
+    assert to_canonical("Bosnia-Herzegovina") == "Bosnia and Herzegovina"
+    assert to_canonical("Cape Verde Islands") == "Cape Verde"
+    assert to_canonical("Congo DR") == "DR Congo"
     assert to_canonical("Czechia") == "Czech Republic"
 
 
 def test_identity_for_already_canonical():
     assert to_canonical("Argentina") == "Argentina"
+    assert to_canonical("South Korea") == "South Korea"  # la API ya usa este nombre
 
 
 def test_unknown_name_falls_back_to_itself():
@@ -359,18 +392,13 @@ _CANONICAL = [
     "England", "Croatia", "Ghana", "Panama",
 ]
 
-# Spellings de la API que difieren del canónico (ajustar con la lista real de Task 1).
+# Spellings de la API que difieren del canónico (CONFIRMADO con /competitions/WC/teams en Task 1).
+# Solo 4 difieren; el resto coincide (South Korea, United States, Turkey, Ivory Coast, Curaçao ya OK).
 _OVERRIDES = {
-    "Korea Republic": "South Korea",
-    "USA": "United States",
-    "Czechia": "Czech Republic",
-    "Türkiye": "Turkey",
-    "Cote d'Ivoire": "Ivory Coast",
-    "Côte d'Ivoire": "Ivory Coast",
-    "Cabo Verde": "Cape Verde",
-    "DR Congo": "DR Congo",
+    "Bosnia-Herzegovina": "Bosnia and Herzegovina",
+    "Cape Verde Islands": "Cape Verde",
     "Congo DR": "DR Congo",
-    "IR Iran": "Iran",
+    "Czechia": "Czech Republic",
 }
 
 # Mapa final: identidad para cada canónico + overrides de la API.
