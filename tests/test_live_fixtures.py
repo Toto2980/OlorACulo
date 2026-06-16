@@ -44,6 +44,33 @@ def test_parse_unresolved_teams_become_none():
     assert not f.resolved
 
 
+def test_has_score_true_para_finalizado_con_goles():
+    f = next(f for f in parse_fixtures(_raw()) if f.id == 1001)
+    assert f.is_finished and f.has_score
+
+
+def test_has_score_false_para_finalizado_sin_marcador():
+    """AWARDED o un FINISHED con fullTime null: is_finished True pero sin goles."""
+    raw = {
+        "matches": [
+            {
+                "id": 9001,
+                "stage": "GROUP_STAGE",
+                "group": "GROUP_A",
+                "homeTeam": {"name": "Mexico"},
+                "awayTeam": {"name": "Canada"},
+                "utcDate": "2026-06-12T19:00:00Z",
+                "status": "AWARDED",
+                "score": {"fullTime": {"home": None, "away": None}},
+            }
+        ]
+    }
+    f = parse_fixtures(raw)[0]
+    assert f.is_finished           # AWARDED -> FINISHED
+    assert f.home_goals is None
+    assert not f.has_score
+
+
 def test_normalize_status_maps_api_vocabulary():
     assert normalize_status("TIMED") == "SCHEDULED"
     assert normalize_status("IN_PLAY") == "LIVE"

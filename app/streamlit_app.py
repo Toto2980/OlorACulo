@@ -585,7 +585,13 @@ with tab_bracket:
                         )
                         continue
                     pred = model.predict(f.home, f.away, neutral=True)
-                    if f.is_finished:
+                    if f.is_finished and not f.has_score:
+                        st.markdown(
+                            f"<div class='scoreline'>✔️ {with_flag(f.home)} vs "
+                            f"{with_flag(f.away)} · finalizado (sin datos de marcador)</div>",
+                            unsafe_allow_html=True,
+                        )
+                    elif f.has_score:
                         s = score_match(f.id, pred.probs, f.home_goals, f.away_goals)
                         mark = "✅" if s.hit else "❌"
                         top5 = top_scorelines(pred.score_matrix, 5)
