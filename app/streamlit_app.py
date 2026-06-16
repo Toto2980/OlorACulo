@@ -23,6 +23,16 @@ from oraculo.tournament.tournament import run_tournament_mc
 from app.services import top_scorelines, model_comparison
 from app.flags import with_flag
 
+import os
+
+from oraculo.live.client import LiveClient, LiveDataError
+from oraculo.live.fixtures import parse_fixtures
+from oraculo.report.match_report import build_match_report
+from oraculo.verify.predictor import frozen_poisson
+from oraculo.verify.scoring import score_match, aggregate, calibration_bins
+from app.live_view import group_by_phase, upcoming_rows, finished_rows
+from app.charts import ranking_bar, calibration_chart
+
 DATA = ROOT / "data" / "results.csv"
 WC = ROOT / "data" / "wc2026.yaml"
 EVAL_FROM = datetime.date(2010, 1, 1)
@@ -61,6 +71,26 @@ def get_elo():
 @st.cache_resource
 def get_config():
     return load_config(WC)
+
+
+@st.cache_resource
+def get_frozen():
+    """Poisson congelado al inicio del Mundial (sin data leakage) para verificación."""
+    return frozen_poisson(get_matches())
+
+
+def _token():
+    try:
+        return st.secrets["FOOTBALL_DATA_TOKEN"]
+    except Exception:
+        return os.environ.get("FOOTBALL_DATA_TOKEN")
+
+
+@st.cache_data(ttl=60)
+def get_fixtures():
+    client = LiveClient(_token())
+    raw = client.get_matches()
+    return parse_fixtures(raw), client.fetched_at
 
 
 @st.cache_data
@@ -207,9 +237,56 @@ st.markdown(
 
 teams = sorted(get_config().teams)
 
-tab_match, tab_cup, tab_teams, tab_metrics = st.tabs(
-    ["⚽  Partido", "🏆  Mundial", "📊  Equipos", "🎯  Métricas"]
+tab_live, tab_bracket, tab_match, tab_cup, tab_verify = st.tabs(
+    ["🔴  En vivo", "🗺️  Cuadro", "⚽  Partido", "🏆  Mundial", "🎯  Verificación"]
 )
+
+
+# --------------------------------------------------------------------------- #
+# Vista: En vivo
+# --------------------------------------------------------------------------- #
+with tab_live:
+    st.subheader("Partidos del Mundial en vivo")
+    try:
+        fixtures, fetched_at = get_fixtures()
+    except LiveDataError:
+        st.error("Sin datos: configurá FOOTBALL_DATA_TOKEN en .streamlit/secrets.toml.")
+        fixtures, fetched_at = [], None
+
+    if fetched_at:
+        st.caption(f"Datos al {fetched_at:%Y-%m-%d %H:%M UTC}")
+
+    if fixtures:
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        st.markdown("#### ⏱️ Próximos")
+        upcoming = upcoming_rows(fixtures, now=now)[:8]
+        if not upcoming:
+            st.caption("No hay próximos partidos cargados.")
+        for r in upcoming:
+            cols = st.columns([4, 3, 3])
+            cols[0].markdown(f"**{r['partido']}**  ·  _{r['fase']}_")
+            cols[1].markdown(f"🕒 {r['kickoff']:%d/%m %H:%M} UTC")
+            cols[2].markdown(f"🔖 {r['estado']}")
+            ok = sum(c.ok for c in r["checks"])
+            cols[2].caption(f"Verificación: {ok}/{len(r['checks'])} checks")
+
+        st.markdown("#### ✅ Resultados recientes (real vs predicho)")
+        model = get_frozen()
+        recientes = finished_rows(fixtures)[-8:]
+        if not recientes:
+            st.caption("Todavía no hay resultados.")
+        for r in recientes:
+            pred = model.predict(r["home"], r["away"], neutral=True)
+            s = score_match(r["id"], pred.probs, r["home_goals"], r["away_goals"])
+            mark = "✅" if s.hit else "❌"
+            st.markdown(
+                f"<div class='scoreline'>{mark} {with_flag(r['home'])} "
+                f"<b>{r['marcador']}</b> {with_flag(r['away'])} · "
+                f"predicho: {s.outcome_pred} · RPS {s.rps:.3f}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("Cuando haya partidos cargados, aparecen acá con su predicción.")
 
 
 # --------------------------------------------------------------------------- #
@@ -281,6 +358,18 @@ with tab_match:
                     unsafe_allow_html=True,
                 )
 
+        report = build_match_report(model, home, away, neutral=neutral)
+        st.markdown("**Mercados derivados**")
+        d1, d2 = st.columns(2)
+        d1.metric("Ambos marcan (BTTS)", f"{report.btts * 100:.0f}%")
+        d2.metric("Over 2.5 goles", f"{report.over25 * 100:.0f}%")
+        st.markdown(
+            f"<div class='caption'>⚠️ Estimación (no sale del modelo): "
+            f"favorito a convertir <b>{report.speculative.top_scorer_team}</b> · "
+            f"tarjetas estimadas {report.speculative.cards_band}.</div>",
+            unsafe_allow_html=True,
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Vista: Predicción del Mundial
@@ -316,19 +405,10 @@ with tab_cup:
             ]
         )
         top = df.head(12)
-        bars = (
-            alt.Chart(top)
-            .mark_bar(color=ACCENT, cornerRadiusEnd=5)
-            .encode(
-                x=alt.X("Campeón:Q", title="Probabilidad de campeón (%)"),
-                y=alt.Y("Equipo:N", sort="-x", title=None),
-                tooltip=[alt.Tooltip("Campeón:Q", format=".1f")],
-            )
+        st.altair_chart(
+            ranking_bar(top, value="Campeón", title="Probabilidad de campeón (%)"),
+            use_container_width=True,
         )
-        labels = bars.mark_text(align="left", dx=4, color=LABEL, fontWeight="bold").encode(
-            text=alt.Text("Campeón:Q", format=".1f")
-        )
-        st.altair_chart((bars + labels).properties(height=420), use_container_width=True)
         st.dataframe(
             df.style.format({"Campeón": "{:.1f}%", "Final": "{:.1f}%", "Semis": "{:.1f}%"}),
             hide_index=True,
@@ -339,73 +419,106 @@ with tab_cup:
 
 
 # --------------------------------------------------------------------------- #
-# Vista: Comparar equipos
+# Vista: Cuadro por fase
 # --------------------------------------------------------------------------- #
-with tab_teams:
-    st.subheader("Comparar figuritas")
-    sel = st.multiselect(
-        "Equipos", teams, default=["Argentina", "Brazil", "France", "Spain"], format_func=with_flag
-    )
-    if sel:
-        poi = get_poisson()
-        elo = get_elo()
-        df = pd.DataFrame(
-            [
-                {
-                    "Equipo": with_flag(t),
-                    "Elo": round(elo.rating(t)),
-                    "Ataque": round(poi.attack.get(t, 0.0), 2),
-                    "Defensa": round(poi.defense.get(t, 0.0), 2),
-                }
-                for t in sel
-            ]
-        )
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        chart = (
-            alt.Chart(df)
-            .mark_bar(color=ACCENT_2, cornerRadiusEnd=5)
-            .encode(
-                x=alt.X("Elo:Q", scale=alt.Scale(zero=False), title="Rating Elo"),
-                y=alt.Y("Equipo:N", sort="-x", title=None),
-                tooltip=["Equipo", "Elo"],
-            )
-            .properties(height=60 + 32 * len(df))
-        )
-        st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("Elegí al menos un equipo.")
-
-
-# --------------------------------------------------------------------------- #
-# Vista: Métricas del modelo
-# --------------------------------------------------------------------------- #
-with tab_metrics:
-    st.subheader("¿Qué tan buena es la figu?")
+with tab_bracket:
+    st.subheader("El cuadro, fase por fase")
     st.markdown(
-        '<p class="caption">Backtest walk-forward desde 2010. RPS más bajo = mejor. '
-        'La <b>vara</b> es el modelo uniforme; cada nivel debe bajarla.</p>',
+        '<p class="caption">Cada cruce real del Mundial con su predicción; si ya se '
+        'jugó, el resultado y si el oráculo acertó.</p>',
+        unsafe_allow_html=True,
+    )
+    try:
+        fixtures, _ = get_fixtures()
+    except LiveDataError:
+        fixtures = []
+    if fixtures:
+        model = get_frozen()
+        for fase, fs in group_by_phase(fixtures).items():
+            with st.expander(f"{fase}  ·  {len(fs)} partidos", expanded=(fase == "Grupos")):
+                for f in sorted(fs, key=lambda x: x.kickoff_utc):
+                    if not f.resolved:
+                        st.markdown(
+                            "<div class='scoreline'>⏳ Por definirse</div>",
+                            unsafe_allow_html=True,
+                        )
+                        continue
+                    pred = model.predict(f.home, f.away, neutral=True)
+                    if f.is_finished:
+                        s = score_match(f.id, pred.probs, f.home_goals, f.away_goals)
+                        mark = "✅" if s.hit else "❌"
+                        st.markdown(
+                            f"<div class='scoreline'>{mark} {with_flag(f.home)} "
+                            f"<b>{f.home_goals}–{f.away_goals}</b> {with_flag(f.away)} "
+                            f"· predicho {s.outcome_pred}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        fav = f.home if pred.p_home >= pred.p_away else f.away
+                        st.markdown(
+                            f"<div class='scoreline'>🔮 {with_flag(f.home)} vs {with_flag(f.away)} "
+                            f"· favorito: <b>{fav}</b> "
+                            f"({max(pred.p_home, pred.p_away) * 100:.0f}%)</div>",
+                            unsafe_allow_html=True,
+                        )
+    else:
+        st.info("El cuadro se arma con los fixtures de la API (configurá tu token).")
+
+
+# --------------------------------------------------------------------------- #
+# Vista: Verificación
+# --------------------------------------------------------------------------- #
+with tab_verify:
+    st.subheader("¿Cuánto le acierta el oráculo?")
+    st.markdown(
+        '<p class="caption">Métricas sobre los partidos YA jugados del Mundial. '
+        'El modelo está congelado al inicio del torneo (sin data leakage).</p>',
+        unsafe_allow_html=True,
+    )
+    try:
+        fixtures, _ = get_fixtures()
+    except LiveDataError:
+        fixtures = []
+    model = get_frozen()
+    scores = []
+    home_pairs = []
+    for f in finished_rows(fixtures):
+        pred = model.predict(f["home"], f["away"], neutral=True)
+        scores.append(score_match(f["id"], pred.probs, f["home_goals"], f["away_goals"]))
+        home_pairs.append((pred.p_home, f["home_goals"] > f["away_goals"]))
+
+    if scores:
+        summ = aggregate(scores)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Aciertos 1X2", f"{summ.hit_rate * 100:.0f}%")
+        c2.metric("Brier medio", f"{summ.mean_brier:.3f}")
+        c3.metric("RPS medio", f"{summ.mean_rps:.3f}")
+        bins = calibration_bins(home_pairs, n_bins=5)
+        cdf = pd.DataFrame(
+            [{"predicted": b.predicted, "observed": b.observed, "n": b.n} for b in bins if b.n]
+        )
+        if not cdf.empty:
+            st.markdown("#### Calibración (P(gana local) predicha vs real)")
+            st.altair_chart(calibration_chart(cdf), use_container_width=True)
+    else:
+        st.info("Todavía no hay partidos jugados para verificar.")
+
+    st.divider()
+    st.markdown("#### Backtest histórico (walk-forward desde 2010)")
+    st.markdown(
+        '<p class="caption">RPS más bajo = mejor. La <b>vara</b> es el modelo uniforme; '
+        'cada nivel debe bajarla.</p>',
         unsafe_allow_html=True,
     )
     if st.button("Revisar el álbum 📖", type="primary"):
         with st.spinner("Backtesteando uniforme, Elo y Poisson..."):
             metrics = model_metrics()
-        df = pd.DataFrame([{"Modelo": k, **v} for k, v in metrics.items()]).sort_values("RPS")
+        mdf = pd.DataFrame([{"Modelo": k, **v} for k, v in metrics.items()]).sort_values("RPS")
         cols = st.columns(3)
-        for col, (_, row) in zip(cols, df.iterrows()):
+        for col, (_, row) in zip(cols, mdf.iterrows()):
             col.metric(row["Modelo"].capitalize(), f"RPS {row['RPS']:.4f}")
-        chart = (
-            alt.Chart(df)
-            .mark_bar(color=ACCENT, cornerRadiusEnd=5)
-            .encode(
-                x=alt.X("RPS:Q", scale=alt.Scale(zero=False), title="RPS (menor = mejor)"),
-                y=alt.Y("Modelo:N", sort="x", title=None),
-                tooltip=[alt.Tooltip("RPS:Q", format=".4f")],
-            )
-            .properties(height=160)
-        )
-        st.altair_chart(chart, use_container_width=True)
         st.dataframe(
-            df.style.format({"RPS": "{:.4f}", "Brier": "{:.4f}", "LogLoss": "{:.4f}"}),
+            mdf.style.format({"RPS": "{:.4f}", "Brier": "{:.4f}", "LogLoss": "{:.4f}"}),
             hide_index=True,
             use_container_width=True,
         )
