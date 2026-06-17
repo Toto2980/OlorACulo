@@ -32,3 +32,27 @@ ALIASES.update(_OVERRIDES)
 
 def to_canonical(api_name: str) -> str:
     return ALIASES.get(api_name, api_name)
+
+
+# Spellings de API-Football (api-sports.io) que difieren del canónico. Best-effort:
+# se valida cuando el usuario cargue su API key. Lo no listado cae a to_canonical/identidad.
+_APIFOOTBALL_OVERRIDES = {
+    "USA": "United States",
+    "Korea Republic": "South Korea",
+    "IR Iran": "Iran",
+    "Côte d'Ivoire": "Ivory Coast",
+    "Cote d'Ivoire": "Ivory Coast",
+    "Congo DR": "DR Congo",
+    "DR Congo": "DR Congo",
+    "Czechia": "Czech Republic",
+    "Cape Verde Islands": "Cape Verde",
+    "Türkiye": "Turkey",
+    "Turkiye": "Turkey",
+}
+
+
+def apifootball_to_canonical(name: str) -> str:
+    """Nombre de equipo de API-Football -> canónico del dataset."""
+    if name in _APIFOOTBALL_OVERRIDES:
+        return _APIFOOTBALL_OVERRIDES[name]
+    return ALIASES.get(name, name)
