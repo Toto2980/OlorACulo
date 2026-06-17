@@ -43,6 +43,9 @@ def upcoming_rows(fixtures: list[Fixture], *, now: datetime.datetime) -> list[di
                 "away": f.away,
                 "kickoff": f.kickoff_utc,
                 "estado": READINESS_LABEL[state],
+                "readiness": state,
+                "referee": f.referee,
+                "referee_country": f.referee_country,
                 "checks": verification_checks(f),
             }
         )

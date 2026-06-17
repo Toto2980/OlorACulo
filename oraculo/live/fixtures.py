@@ -55,6 +55,8 @@ class Fixture:
     status: str
     home_goals: Optional[int]
     away_goals: Optional[int]
+    referee: Optional[str] = None
+    referee_country: Optional[str] = None
 
     @property
     def is_finished(self) -> bool:
@@ -88,10 +90,20 @@ def _parse_dt(s: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _referee(raw: list | None) -> tuple[Optional[str], Optional[str]]:
+    """Del array `referees` toma el árbitro principal (type REFEREE) o el primero."""
+    refs = raw or []
+    if not refs:
+        return None, None
+    main = next((r for r in refs if r.get("type") == "REFEREE"), refs[0])
+    return main.get("name"), main.get("nationality")
+
+
 def parse_fixtures(raw: dict) -> list[Fixture]:
     out: list[Fixture] = []
     for m in raw.get("matches", []):
         ft = (m.get("score") or {}).get("fullTime") or {}
+        ref_name, ref_country = _referee(m.get("referees"))
         out.append(
             Fixture(
                 id=int(m["id"]),
@@ -103,6 +115,8 @@ def parse_fixtures(raw: dict) -> list[Fixture]:
                 status=normalize_status(str(m.get("status", "SCHEDULED"))),
                 home_goals=ft.get("home"),
                 away_goals=ft.get("away"),
+                referee=ref_name,
+                referee_country=ref_country,
             )
         )
     return out

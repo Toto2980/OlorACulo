@@ -37,6 +37,8 @@ def test_upcoming_rows_excludes_finished():
     assert all("estado" in r for r in rows)
     # y los equipos por separado para mostrarlos traducidos
     assert all("home" in r and "away" in r for r in rows)
+    # más el estado de readiness y el árbitro para el análisis pre-partido
+    assert all("readiness" in r and "referee" in r for r in rows)
 
 
 def test_finished_rows_only_finished():

@@ -44,6 +44,49 @@ def test_parse_unresolved_teams_become_none():
     assert not f.resolved
 
 
+def test_parse_referee_desde_el_payload():
+    raw = {
+        "matches": [
+            {
+                "id": 9100,
+                "stage": "GROUP_STAGE",
+                "group": "GROUP_A",
+                "homeTeam": {"name": "Argentina"},
+                "awayTeam": {"name": "Brazil"},
+                "utcDate": "2026-06-20T19:00:00Z",
+                "status": "TIMED",
+                "score": {"fullTime": {"home": None, "away": None}},
+                "referees": [
+                    {"name": "Wilton Sampaio", "type": "REFEREE", "nationality": "Brazil"},
+                    {"name": "Otro", "type": "ASSISTANT_REFEREE_N1", "nationality": "Brazil"},
+                ],
+            }
+        ]
+    }
+    f = parse_fixtures(raw)[0]
+    assert f.referee == "Wilton Sampaio"
+    assert f.referee_country == "Brazil"
+
+
+def test_parse_referee_ausente_es_none():
+    raw = {
+        "matches": [
+            {
+                "id": 9101,
+                "stage": "GROUP_STAGE",
+                "homeTeam": {"name": "Argentina"},
+                "awayTeam": {"name": "Brazil"},
+                "utcDate": "2026-06-20T19:00:00Z",
+                "status": "TIMED",
+                "score": {"fullTime": {"home": None, "away": None}},
+                "referees": [],
+            }
+        ]
+    }
+    f = parse_fixtures(raw)[0]
+    assert f.referee is None and f.referee_country is None
+
+
 def test_has_score_true_para_finalizado_con_goles():
     f = next(f for f in parse_fixtures(_raw()) if f.id == 1001)
     assert f.is_finished and f.has_score
