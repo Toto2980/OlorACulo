@@ -34,6 +34,8 @@ import os
 
 from oraculo.live.client import LiveClient, LiveDataError
 from oraculo.live.fixtures import parse_fixtures
+from oraculo.live.lineups import LineupClient
+from oraculo.live.schedule import Readiness
 from oraculo.report.match_report import build_match_report
 from oraculo.verify.predictor import frozen_poisson
 from oraculo.verify.scoring import score_match, aggregate, calibration_bins
@@ -173,6 +175,37 @@ def _render_pillars(pillars, target=st):
             f"<span class='caption'>· {chip}</span><br>{p.texto}</div>",
             unsafe_allow_html=True,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Formaciones (API-Football, opcional por API key)
+# --------------------------------------------------------------------------- #
+LINEUP_READY = {Readiness.T30, Readiness.T15, Readiness.EN_VIVO}
+
+
+def _apifootball_token():
+    try:
+        return st.secrets["API_FOOTBALL_KEY"]
+    except Exception:
+        return os.environ.get("API_FOOTBALL_KEY")
+
+
+@st.cache_data(ttl=300)
+def _lineups_for(home: str, away: str, date_iso: str):
+    """(lineup_home, lineup_away) o None. Cacheado 5 min (cuida las 100 req/día)."""
+    token = _apifootball_token()
+    if not token:
+        return None
+    return LineupClient(token).lineups_for(home, away, datetime.date.fromisoformat(date_iso))
+
+
+def _render_lineups(home: str, away: str, lineups) -> None:
+    home_lu, away_lu = lineups
+    c1, c2 = st.columns(2)
+    for col, team, lu in ((c1, home, home_lu), (c2, away, away_lu)):
+        col.markdown(f"**{with_flag(team)} · {lu.formation or '?'}**")
+        for pos, name in lu.start_xi:
+            col.markdown(f"<div class='scoreline'>{pos} · {name}</div>", unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -554,6 +587,27 @@ with tab_prode:
         unsafe_allow_html=True,
     )
 
+    # Formaciones (solo dentro de ~T-30 y si hay API key). No cambian el número.
+    p_lineups = None
+    st.markdown("#### 🧩 Formaciones")
+    if candidatos:
+        if not _apifootball_token():
+            st.caption(
+                "ℹ️ Agregá `API_FOOTBALL_KEY` en `.streamlit/secrets.toml` para ver el XI "
+                "confirmado (entra ~30 min antes del partido)."
+            )
+        elif chosen["readiness"] in LINEUP_READY:
+            p_lineups = _lineups_for(p_home_team, p_away_team, chosen["kickoff"].date().isoformat())
+            if p_lineups:
+                st.success("Formación confirmada (T-30) ✅")
+                _render_lineups(p_home_team, p_away_team, p_lineups)
+            else:
+                st.caption("Formación todavía no publicada por la fuente (reintentá cerca del inicio).")
+        else:
+            st.caption("Formación oficial ~30 min antes del partido (modo *probable* por ahora).")
+    else:
+        st.caption("Elegí un partido del fixture para intentar traer las formaciones.")
+
     st.markdown("#### 🔍 Análisis por pilares")
     st.markdown(
         '<p class="caption">📊 = respaldado por datos · 🔮 = estimación (sin datos de jugadores).</p>',
@@ -562,7 +616,7 @@ with tab_prode:
     _render_pillars(
         _build_pillars(
             p_home_team, p_away_team,
-            referee=p_referee, referee_country=p_referee_country,
+            referee=p_referee, referee_country=p_referee_country, lineups=p_lineups,
         )
     )
 
