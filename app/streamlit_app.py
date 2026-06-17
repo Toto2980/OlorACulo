@@ -20,8 +20,15 @@ from oraculo.models.elo import EloModel
 from oraculo.models.poisson import PoissonConfig, PoissonModel
 from oraculo.tournament.config import load_config
 from oraculo.tournament.tournament import run_tournament_mc
-from app.services import top_scorelines, model_comparison, prode_verdict, scoreline_hit
+from app.services import (
+    top_scorelines,
+    model_comparison,
+    prode_verdict,
+    scoreline_hit,
+    head_to_head,
+)
 from app.flags import with_flag, display_name
+from app.pillars import prematch_pillars, DATO
 
 import os
 
@@ -132,6 +139,40 @@ def _played_known_items():
 def model_metrics():
     res = model_comparison(get_matches(), EVAL_FROM)
     return {k: {"RPS": v.rps, "Brier": v.brier, "LogLoss": v.log_loss} for k, v in res.items()}
+
+
+# --------------------------------------------------------------------------- #
+# Análisis pre-partido (6 pilares)
+# --------------------------------------------------------------------------- #
+HOSTS = {"United States", "Canada", "Mexico"}
+
+
+def _local_team(home: str, away: str):
+    if home in HOSTS:
+        return home
+    if away in HOSTS:
+        return away
+    return None
+
+
+def _build_pillars(home: str, away: str, *, referee=None, referee_country=None, lineups=None):
+    report = build_match_report(get_poisson(), home, away, neutral=True)
+    h2h = head_to_head(get_matches(), home, away)
+    return prematch_pillars(
+        report, home=home, away=away,
+        referee=referee, referee_country=referee_country,
+        local_team=_local_team(home, away), h2h=h2h, lineups=lineups,
+    )
+
+
+def _render_pillars(pillars, target=st):
+    for p in pillars:
+        chip = "📊 dato" if p.fundamento == DATO else "🔮 estimación"
+        target.markdown(
+            f"<div class='scoreline'><b>{p.emoji} {p.titulo}</b> "
+            f"<span class='caption'>· {chip}</span><br>{p.texto}</div>",
+            unsafe_allow_html=True,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -304,6 +345,18 @@ with tab_live:
             cols[2].markdown(f"🔖 {r['estado']}")
             ok = sum(c.ok for c in r["checks"])
             cols[2].caption(f"Verificación: {ok}/{len(r['checks'])} checks")
+            if r["home"] in teams and r["away"] in teams:
+                with st.expander("🔍 Análisis pre-partido (resumen)"):
+                    report = build_match_report(get_poisson(), r["home"], r["away"], neutral=True)
+                    st.markdown(
+                        f"<div class='verdict'>🃏 {prode_verdict(report)}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    pillars = _build_pillars(
+                        r["home"], r["away"],
+                        referee=r.get("referee"), referee_country=r.get("referee_country"),
+                    )
+                    _render_pillars([p for p in pillars if p.fundamento == DATO])
 
         st.markdown("#### ✅ Resultados recientes (real vs predicho)")
         model = get_frozen()
@@ -436,21 +489,21 @@ with tab_prode:
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     proximos = upcoming_rows(fixtures, now=now) if fixtures else []
     # Solo cruces con ambos equipos definidos y conocidos por el modelo.
-    candidatos = []
-    for r in proximos:
-        if r["home"] in teams and r["away"] in teams:
-            candidatos.append((r["fase"], r["home"], r["away"], r["kickoff"]))
+    candidatos = [r for r in proximos if r["home"] in teams and r["away"] in teams]
 
+    p_referee = p_referee_country = None
     if candidatos:
         labels = [
-            f"{fase} · {with_flag(h)} vs {with_flag(a)} · {ko:%d/%m %H:%M} UTC"
-            for (fase, h, a, ko) in candidatos
+            f"{r['fase']} · {with_flag(r['home'])} vs {with_flag(r['away'])} · {r['kickoff']:%d/%m %H:%M} UTC"
+            for r in candidatos
         ]
         idx = st.selectbox(
             "Partido del Mundial", range(len(labels)), format_func=lambda i: labels[i]
         )
-        fase, p_home_team, p_away_team, _ = candidatos[idx]
-        st.caption(f"Fase: {fase}")
+        chosen = candidatos[idx]
+        p_home_team, p_away_team = chosen["home"], chosen["away"]
+        p_referee, p_referee_country = chosen.get("referee"), chosen.get("referee_country")
+        st.caption(f"Fase: {chosen['fase']}")
     else:
         st.info("No hay próximos partidos del fixture; elegí dos equipos.")
         cc1, cc2 = st.columns(2)
@@ -499,6 +552,18 @@ with tab_prode:
     st.markdown(
         f"<div class='fav'>🃏 Conclusión del oráculo: {prode_verdict(report)}</div>",
         unsafe_allow_html=True,
+    )
+
+    st.markdown("#### 🔍 Análisis por pilares")
+    st.markdown(
+        '<p class="caption">📊 = respaldado por datos · 🔮 = estimación (sin datos de jugadores).</p>',
+        unsafe_allow_html=True,
+    )
+    _render_pillars(
+        _build_pillars(
+            p_home_team, p_away_team,
+            referee=p_referee, referee_country=p_referee_country,
+        )
     )
 
 
