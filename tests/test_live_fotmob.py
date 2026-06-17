@@ -3,6 +3,8 @@ import datetime
 from oraculo.live.fotmob import (
     parse_fotmob_lineups,
     find_fotmob_match_id,
+    parse_player_profile,
+    PlayerProfile,
     FotmobLineups,
     FotmobClient,
 )
@@ -16,18 +18,45 @@ _DETAILS_CONFIRMED = {
                 "name": "Argentina",
                 "formation": "4-4-2",
                 "starters": [
-                    {"name": "Emiliano Martínez", "shirtNumber": 23},
-                    {"name": "Lionel Messi", "shirtNumber": 10},
+                    {"id": 268375, "name": "Emiliano Martínez", "shirtNumber": 23},
+                    {"id": 19198, "name": "Lionel Messi", "shirtNumber": 10},
                 ],
             },
             "awayTeam": {
                 "name": "Algeria",
                 "formation": "4-2-3-1",
-                "starters": [{"name": "Oukidja", "shirtNumber": 16}],
+                "starters": [{"id": 555, "name": "Oukidja", "shirtNumber": 16}],
             },
         },
         "weather": {"temperature": 23, "windSpeed": 3, "precipitation": 0, "relativeHumidity": 63},
     }
+}
+
+
+_PLAYER_OK = {
+    "id": 268375,
+    "name": "Emiliano Martínez",
+    "primaryTeam": {"teamName": "Aston Villa"},
+    "positionDescription": {"label": "Keeper"},
+    "injuryInformation": None,
+    "status": "active",
+    "playerInformation": [{"title": "Age", "value": {"fallback": "33"}}],
+    "mainLeague": {
+        "leagueName": "Premier League",
+        "season": "2025/2026",
+        "stats": [{"title": "Rating", "value": 7.07}, {"title": "Matches", "value": 32}],
+    },
+}
+
+_PLAYER_INJURED = {
+    "id": 99,
+    "name": "Lesionado",
+    "primaryTeam": {"teamName": "Club X"},
+    "positionDescription": {"label": "Forward"},
+    "injuryInformation": {"injuryType": "Knee", "expectedReturn": "2026-07-01"},
+    "status": "out",
+    "playerInformation": [],
+    "mainLeague": {"leagueName": "Liga", "season": "2025/2026", "stats": []},
 }
 
 _DETAILS_PREDICTED = {
@@ -92,3 +121,37 @@ def test_client_degrada_a_none_si_no_encuentra_el_partido(monkeypatch, tmp_path)
     # forzamos que la lista de partidos no traiga el cruce
     monkeypatch.setattr(client, "_get", lambda name, url: _MATCHES)
     assert client.lineups_for("Spain", "France", datetime.date(2026, 6, 17)) is None
+
+
+def test_lineups_exponen_player_ids_para_encadenar_con_la_ficha():
+    res = parse_fotmob_lineups(_DETAILS_CONFIRMED)
+    assert res.player_ids["Lionel Messi"] == 19198
+    assert res.player_ids["Emiliano Martínez"] == 268375
+
+
+def test_parse_player_profile_sano():
+    p = parse_player_profile(_PLAYER_OK)
+    assert isinstance(p, PlayerProfile)
+    assert p.name == "Emiliano Martínez"
+    assert p.team == "Aston Villa"
+    assert p.position == "Keeper"
+    assert p.age == "33"
+    assert p.injured is False
+    assert p.stats.get("Rating") == 7.07
+    assert "Premier League" in (p.league or "")
+
+
+def test_parse_player_profile_lesionado():
+    p = parse_player_profile(_PLAYER_INJURED)
+    assert p.injured is True
+    assert "Knee" in (p.injury_note or "")
+
+
+def test_parse_player_profile_vacio_es_none():
+    assert parse_player_profile({}) is None
+
+
+def test_client_player_profile_degrada_a_none(monkeypatch, tmp_path):
+    client = FotmobClient(cache_dir=tmp_path)
+    monkeypatch.setattr(client, "_get", lambda name, url: None)
+    assert client.player_profile(123) is None

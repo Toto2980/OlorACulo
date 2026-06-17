@@ -188,6 +188,34 @@ def _fotmob_lineups(home: str, away: str, date_iso: str):
         return None
 
 
+@st.cache_data(ttl=3600)
+def _player_profile(player_id: int):
+    """Ficha Fotmob (club/posición/edad/lesión/forma) o None. Cacheada 1 h."""
+    try:
+        return FotmobClient().player_profile(player_id)
+    except Exception:
+        return None
+
+
+def _render_player_card(p) -> None:
+    if not p:
+        st.caption("Ficha no disponible en la fuente.")
+        return
+    badge = "🩹 Lesionado" if p.injured else f"🟢 {p.status or 'activo'}"
+    meta = " · ".join(x for x in [p.team, p.position, (f"{p.age} años" if p.age else None)] if x)
+    st.markdown(f"**{p.name}** — {badge}")
+    if meta:
+        st.caption(meta)
+    if p.injured and p.injury_note:
+        st.caption(f"Detalle lesión: {p.injury_note}")
+    if p.stats:
+        statline = " · ".join(f"{k}: {v}" for k, v in p.stats.items())
+        st.markdown(
+            f"<div class='scoreline'>{p.league or ''} {p.season or ''} — {statline}</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def _render_lineups(home: str, away: str, lineups) -> None:
     home_lu, away_lu = lineups
     c1, c2 = st.columns(2)
@@ -591,6 +619,12 @@ with tab_prode:
             else:
                 st.info("Formación probable 🔶 (se confirma ~1h antes) · fuente: Fotmob")
             _render_lineups(p_home_team, p_away_team, p_lineups)
+            if fm.player_ids:
+                st.markdown("**🩺 Ficha de jugador** (club, forma de la temporada y estado/lesión)")
+                jugador = st.selectbox(
+                    "Jugador del XI", sorted(fm.player_ids), key="prode_player"
+                )
+                _render_player_card(_player_profile(fm.player_ids[jugador]))
         else:
             st.caption("Formación todavía no disponible en la fuente (Fotmob). Reintentá más cerca del partido.")
     else:

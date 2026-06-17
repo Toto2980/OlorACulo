@@ -36,6 +36,21 @@ class FotmobLineups:
     away: TeamLineup
     confirmed: bool
     weather: Optional[dict] = None
+    player_ids: Optional[dict] = None  # {nombre del jugador: fotmob playerId}
+
+
+@dataclass(frozen=True)
+class PlayerProfile:
+    name: str
+    team: Optional[str]
+    position: Optional[str]
+    age: Optional[str]
+    injured: bool
+    injury_note: Optional[str]
+    status: Optional[str]
+    league: Optional[str]
+    season: Optional[str]
+    stats: dict  # {título: valor} de la liga principal (Rating, Matches, Goals, Assists...)
 
 
 def _team_lineup(side: dict) -> TeamLineup:
@@ -54,11 +69,58 @@ def parse_fotmob_lineups(details_raw: dict) -> Optional[FotmobLineups]:
     if not home or not away:
         return None
     weather = (details_raw or {}).get("content", {}).get("weather")
+    player_ids = {}
+    for side in (home, away):
+        for p in side.get("starters") or []:
+            if p.get("id") is not None and p.get("name"):
+                player_ids[p["name"]] = p["id"]
     return FotmobLineups(
         home=_team_lineup(home),
         away=_team_lineup(away),
         confirmed=(lu.get("lineupType") == "standard"),
         weather=weather,
+        player_ids=player_ids,
+    )
+
+
+_PROFILE_STATS = {"Rating", "Matches", "Goals", "Assists", "Clean sheets", "Minutes played"}
+
+
+def _player_age(raw: dict) -> Optional[str]:
+    for it in raw.get("playerInformation") or []:
+        if it.get("title") == "Age":
+            val = it.get("value")
+            if isinstance(val, dict):
+                return str(val.get("fallback") or val.get("numberValue") or "") or None
+            return str(val) if val is not None else None
+    return None
+
+
+def parse_player_profile(raw: dict) -> Optional[PlayerProfile]:
+    """Ficha de jugador desde /api/data/playerData. None si no hay datos."""
+    if not raw or not raw.get("name"):
+        return None
+    injury = raw.get("injuryInformation")
+    ml = raw.get("mainLeague") or {}
+    stats = {
+        s.get("title"): s.get("value")
+        for s in (ml.get("stats") or [])
+        if s.get("title") in _PROFILE_STATS
+    }
+    note = None
+    if injury:
+        note = injury.get("injuryType") or injury.get("expectedReturn") or "lesionado"
+    return PlayerProfile(
+        name=raw["name"],
+        team=(raw.get("primaryTeam") or {}).get("teamName"),
+        position=(raw.get("positionDescription") or {}).get("label"),
+        age=_player_age(raw),
+        injured=injury is not None,
+        injury_note=note,
+        status=raw.get("status"),
+        league=ml.get("leagueName"),
+        season=ml.get("season"),
+        stats=stats,
     )
 
 
@@ -117,3 +179,9 @@ class FotmobClient:
         if not details:
             return None
         return parse_fotmob_lineups(details)
+
+    def player_profile(self, player_id: int) -> Optional[PlayerProfile]:
+        raw = self._get(f"player_{player_id}", f"{FOTMOB_BASE}/playerData?id={player_id}")
+        if not raw:
+            return None
+        return parse_player_profile(raw)

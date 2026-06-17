@@ -93,6 +93,12 @@ data/
   ~1h antes). Trae formación + XI + `content.weather`. User-Agent de navegador, cache 5 min, degrada
   a `None` ante cualquier error. **No alteran la predicción Poisson** (sin ratings de jugadores), solo
   enriquecen el texto. Lanzador: doble-click en `Correr OlorACulo.bat` / acceso directo del Escritorio.
+- **Ficha de jugador** (club, posición, edad, **lesión/estado**, stats de la temporada): también de
+  Fotmob keyless `https://www.fotmob.com/api/data/playerData?id={playerId}`. El `playerId` sale del XI
+  del `matchDetails` (`FotmobLineups.player_ids`), encadena sin llamada de búsqueda. En el Prode hay un
+  selector de jugador del XI (1 llamada por selección, cacheada 1 h). **NO hizo falta LanusStats ni el
+  header firmado `x-mas`**: el path `/api/data/` no está protegido (la ruta vieja `/api/playerData` sí
+  da 404/403).
 - **API-Football quedó DESHABILITADO** (`oraculo/live/lineups.py` sigue en el repo pero la app no lo
   usa): su plan **gratuito no da acceso a la temporada 2026** ("Free plans do not have access to this
   season, try from 2022 to 2024"). Sofascore también descartado (403 Cloudflare).
