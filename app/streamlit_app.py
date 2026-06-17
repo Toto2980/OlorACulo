@@ -29,6 +29,7 @@ from app.services import (
 )
 from app.flags import with_flag, display_name
 from app.pillars import prematch_pillars, DATO
+from app.postmatch import postmatch_report
 
 import os
 
@@ -834,6 +835,47 @@ with tab_verify:
     except LiveDataError:
         fixtures = []
     model = get_frozen()
+
+    # Análisis post-partido por partido: lo esperado vs lo que pasó.
+    jugados = finished_rows(fixtures)
+    st.markdown("#### 🔬 Análisis post-partido (esperado vs real)")
+    if jugados:
+        idx = st.selectbox(
+            "Elegí un partido jugado",
+            range(len(jugados)),
+            format_func=lambda i: (
+                f"{with_flag(jugados[i]['home'])} {jugados[i]['marcador']} "
+                f"{with_flag(jugados[i]['away'])} · {jugados[i]['fase']}"
+            ),
+            key="postmatch_sel",
+        )
+        r = jugados[idx]
+        pm = postmatch_report(
+            model.predict(r["home"], r["away"], neutral=True),
+            r["home"], r["away"], r["home_goals"], r["away_goals"],
+        )
+        mark = "✅" if pm.hit else "❌"
+        st.markdown(f"<div class='fav'>{mark} {pm.verdict}</div>", unsafe_allow_html=True)
+        e1, e2, e3 = st.columns(3)
+        e1.metric(f"Esperado · {with_flag(r['home'])}", f"{pm.p_home * 100:.0f}%")
+        e2.metric("Empate", f"{pm.p_draw * 100:.0f}%")
+        e3.metric(with_flag(r["away"]), f"{pm.p_away * 100:.0f}%")
+        if pm.xg_home is not None:
+            st.caption(
+                f"xG esperado {pm.xg_home:.2f}–{pm.xg_away:.2f} · resultado real "
+                f"{r['home_goals']}–{r['away_goals']} · RPS {pm.rps:.3f}"
+            )
+        st.markdown("**Marcadores más probables (pre-partido):**")
+        for k, ((i, j), p) in enumerate(pm.top_scores, start=1):
+            hit = "🎯" if (i == r["home_goals"] and j == r["away_goals"]) else ""
+            st.markdown(
+                f"<div class='scoreline'>{k}. {i}–{j} · {p * 100:.1f}% {hit}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.caption("Todavía no hay partidos jugados para analizar.")
+    st.divider()
+
     scores = []
     home_pairs = []
     for f in finished_rows(fixtures):
