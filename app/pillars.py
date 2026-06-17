@@ -53,6 +53,7 @@ def prematch_pillars(
     h2h: Optional[tuple[int, int, int, int]] = None,
     lineups=None,
     weather: Optional[dict] = None,
+    squad: Optional[dict] = None,
 ) -> list[Pillar]:
     fav, undog, fav_p = _favorito(report, home, away)
     parejo = max(report.p_home, report.p_draw, report.p_away) < 0.45
@@ -77,13 +78,29 @@ def prematch_pillars(
     pillars.append(Pillar("Control del ritmo y posturas base", "🎛️", txt1, DATO))
 
     # 2 — Emparejamientos individuales y zonas de conflicto
-    if abs(xh - xa) < 0.25:
-        txt2 = f"Sin un lado claramente más peligroso (xG {xh:.2f}–{xa:.2f}): se define en los duelos del medio y en las transiciones."
+    home_top = (squad or {}).get("home_top")
+    away_top = (squad or {}).get("away_top")
+    if squad and (home_top or away_top):
+        bits = []
+        if home_top:
+            bits.append(f"{H} se apoya en {home_top[0]} (rating {home_top[1]})")
+        if away_top:
+            bits.append(f"{A} en {away_top[0]} (rating {away_top[1]})")
+        lado = H if xh >= xa else A
+        txt2 = (
+            "Duelo de figuras: " + "; ".join(bits) + f". El peso ofensivo cae del lado de {lado} "
+            f"(xG {xh:.2f}–{xa:.2f}); ahí se rompe el equilibrio."
+        )
+        fund2 = DATO
     else:
-        lado = H if xh > xa else A
-        txt2 = f"El peso ofensivo cae del lado de {lado} (xG {xh:.2f}–{xa:.2f}); ahí está el mano a mano que rompe el equilibrio, y ojo a la pelota a la espalda."
-    txt2 += " Sin datos de jugadores, es lectura del modelo."
-    pillars.append(Pillar("Emparejamientos individuales y zonas de conflicto", "⚔️", txt2, ESTIMACION))
+        if abs(xh - xa) < 0.25:
+            txt2 = f"Sin un lado claramente más peligroso (xG {xh:.2f}–{xa:.2f}): se define en los duelos del medio y en las transiciones."
+        else:
+            lado = H if xh > xa else A
+            txt2 = f"El peso ofensivo cae del lado de {lado} (xG {xh:.2f}–{xa:.2f}); ahí está el mano a mano que rompe el equilibrio, y ojo a la pelota a la espalda."
+        txt2 += " Sin datos de jugadores, es lectura del modelo."
+        fund2 = ESTIMACION
+    pillars.append(Pillar("Emparejamientos individuales y zonas de conflicto", "⚔️", txt2, fund2))
 
     # 3 — Pelota parada y juego aéreo
     if tempo == "trabado" or parejo:
@@ -93,11 +110,24 @@ def prematch_pillars(
     pillars.append(Pillar("Pelota parada y juego aéreo", "🎯", txt3, ESTIMACION))
 
     # 4 — Gestión del desgaste y los bancos
-    txt4 = "Los últimos 20-30' suelen definir los partidos cerrados. "
-    if not parejo:
-        txt4 += f"{FAV}, con la ventaja, intentará administrar; "
-    txt4 += "sin datos de plantel, la profundidad del banco queda como incógnita."
-    pillars.append(Pillar("Gestión del desgaste y los bancos", "🔋", txt4, ESTIMACION))
+    home_bench = (squad or {}).get("home_bench")
+    away_bench = (squad or {}).get("away_bench")
+    if squad and (home_bench is not None or away_bench is not None):
+        txt4 = (
+            f"Banco: {H} con {home_bench} suplentes vs {A} con {away_bench}. "
+            "Los últimos 20-30' los define quién tenga recambio para mantener el nivel"
+        )
+        if not parejo:
+            txt4 += f"; {FAV} además parte con ventaja para administrar"
+        txt4 += "."
+        fund4 = DATO
+    else:
+        txt4 = "Los últimos 20-30' suelen definir los partidos cerrados. "
+        if not parejo:
+            txt4 += f"{FAV}, con la ventaja, intentará administrar; "
+        txt4 += "sin datos de plantel, la profundidad del banco queda como incógnita."
+        fund4 = ESTIMACION
+    pillars.append(Pillar("Gestión del desgaste y los bancos", "🔋", txt4, fund4))
 
     # 5 — Contexto ambiental
     partes: list[str] = []

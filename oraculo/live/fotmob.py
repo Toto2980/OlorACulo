@@ -59,7 +59,11 @@ def _team_lineup(side: dict) -> TeamLineup:
         (str(p.get("shirtNumber") or "?"), p.get("name") or "?")
         for p in (side.get("starters") or [])
     ]
-    return TeamLineup(team=name, formation=side.get("formation"), start_xi=xi)
+    bench = tuple(
+        (str(p.get("shirtNumber") or "?"), p.get("name") or "?")
+        for p in (side.get("subs") or [])
+    )
+    return TeamLineup(team=name, formation=side.get("formation"), start_xi=xi, bench=bench)
 
 
 def parse_fotmob_lineups(details_raw: dict) -> Optional[FotmobLineups]:
@@ -71,7 +75,7 @@ def parse_fotmob_lineups(details_raw: dict) -> Optional[FotmobLineups]:
     weather = (details_raw or {}).get("content", {}).get("weather")
     player_ids = {}
     for side in (home, away):
-        for p in side.get("starters") or []:
+        for p in (side.get("starters") or []) + (side.get("subs") or []):
             if p.get("id") is not None and p.get("name"):
                 player_ids[p["name"]] = p["id"]
     return FotmobLineups(

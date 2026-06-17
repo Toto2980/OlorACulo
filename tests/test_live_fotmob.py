@@ -129,6 +129,25 @@ def test_lineups_exponen_player_ids_para_encadenar_con_la_ficha():
     assert res.player_ids["Emiliano Martínez"] == 268375
 
 
+def test_parse_banco_desde_subs():
+    raw = {
+        "content": {
+            "lineup": {
+                "lineupType": "standard",
+                "homeTeam": {
+                    "name": "Argentina", "formation": "4-3-3",
+                    "starters": [{"id": 1, "name": "A", "shirtNumber": 1}],
+                    "subs": [{"id": 50, "name": "Suplente", "shirtNumber": 12}],
+                },
+                "awayTeam": {"name": "Brazil", "formation": "4-4-2", "starters": [], "subs": []},
+            }
+        }
+    }
+    res = parse_fotmob_lineups(raw)
+    assert res.home.bench == (("12", "Suplente"),)
+    assert res.player_ids["Suplente"] == 50  # los suplentes también encadenan a su ficha
+
+
 def test_parse_player_profile_sano():
     p = parse_player_profile(_PLAYER_OK)
     assert isinstance(p, PlayerProfile)

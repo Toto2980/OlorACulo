@@ -156,13 +156,15 @@ def _local_team(home: str, away: str):
     return None
 
 
-def _build_pillars(home: str, away: str, *, referee=None, referee_country=None, lineups=None, weather=None):
+def _build_pillars(home: str, away: str, *, referee=None, referee_country=None,
+                   lineups=None, weather=None, squad=None):
     report = build_match_report(get_poisson(), home, away, neutral=True)
     h2h = head_to_head(get_matches(), home, away)
     return prematch_pillars(
         report, home=home, away=away,
         referee=referee, referee_country=referee_country,
-        local_team=_local_team(home, away), h2h=h2h, lineups=lineups, weather=weather,
+        local_team=_local_team(home, away), h2h=h2h,
+        lineups=lineups, weather=weather, squad=squad,
     )
 
 
@@ -197,6 +199,43 @@ def _player_profile(player_id: int):
         return None
 
 
+@st.cache_data(ttl=1800, show_spinner="Cargando fichas del XI…")
+def _xi_profiles(pairs: tuple):
+    """pairs = ((nombre, playerId), ...). Devuelve {nombre: PlayerProfile|None}."""
+    client = FotmobClient()
+    out = {}
+    for name, pid in pairs:
+        try:
+            out[name] = client.player_profile(pid)
+        except Exception:
+            out[name] = None
+    return out
+
+
+def _player_tip(p) -> str:
+    """Texto plano para el tooltip (atributo title) de un jugador del XI."""
+    if not p:
+        return ""
+    bits = [x for x in [p.team, p.position, (f"{p.age} años" if p.age else None)] if x]
+    if isinstance(p.stats.get("Goals"), int) or isinstance(p.stats.get("Assists"), int):
+        bits.append(f"{p.stats.get('Goals', 0)}G {p.stats.get('Assists', 0)}A")
+    if p.stats.get("Rating"):
+        bits.append(f"rating {p.stats['Rating']}")
+    bits.append("🩹 lesionado" if p.injured else f"🟢 {p.status or 'activo'}")
+    return " · ".join(str(b) for b in bits).replace("'", "’")
+
+
+def _top_starter(team_lineup, profiles) -> tuple | None:
+    """(nombre, rating) del titular con mejor rating de temporada, o None."""
+    best = None
+    for _, name in team_lineup.start_xi:
+        p = profiles.get(name)
+        r = p.stats.get("Rating") if (p and p.stats) else None
+        if isinstance(r, (int, float)) and (best is None or r > best[1]):
+            best = (name, r)
+    return best
+
+
 def _render_player_card(p) -> None:
     if not p:
         st.caption("Ficha no disponible en la fuente.")
@@ -216,13 +255,20 @@ def _render_player_card(p) -> None:
         )
 
 
-def _render_lineups(home: str, away: str, lineups) -> None:
+def _render_lineups(home: str, away: str, lineups, profiles=None) -> None:
     home_lu, away_lu = lineups
+    profiles = profiles or {}
     c1, c2 = st.columns(2)
     for col, team, lu in ((c1, home, home_lu), (c2, away, away_lu)):
         col.markdown(f"**{with_flag(team)} · {lu.formation or '?'}**")
         for pos, name in lu.start_xi:
-            col.markdown(f"<div class='scoreline'>{pos} · {name}</div>", unsafe_allow_html=True)
+            tip = _player_tip(profiles.get(name))
+            attr = f" title='{tip}'" if tip else ""
+            col.markdown(
+                f"<div class='scoreline'{attr}>{pos} · {name}</div>", unsafe_allow_html=True
+            )
+        if profiles:
+            col.caption("Pasá el cursor sobre cada jugador para ver su ficha.")
 
 
 # --------------------------------------------------------------------------- #
@@ -608,6 +654,7 @@ with tab_prode:
     # No cambian el número Poisson: solo enriquecen el texto.
     p_lineups = None
     p_weather = None
+    p_squad = None
     st.markdown("#### 🧩 Formaciones")
     if candidatos:
         fm = _fotmob_lineups(p_home_team, p_away_team, chosen["kickoff"].date().isoformat())
@@ -618,13 +665,21 @@ with tab_prode:
                 st.success("Formación confirmada ✅ · fuente: Fotmob")
             else:
                 st.info("Formación probable 🔶 (se confirma ~1h antes) · fuente: Fotmob")
-            _render_lineups(p_home_team, p_away_team, p_lineups)
+            # Fichas de los titulares para el hover y para fundar los pilares.
+            starter_names = [n for _, n in fm.home.start_xi] + [n for _, n in fm.away.start_xi]
+            pairs = tuple((n, fm.player_ids[n]) for n in starter_names if n in (fm.player_ids or {}))
+            profiles = _xi_profiles(pairs) if pairs else {}
+            _render_lineups(p_home_team, p_away_team, p_lineups, profiles)
+            p_squad = {
+                "home_top": _top_starter(fm.home, profiles),
+                "away_top": _top_starter(fm.away, profiles),
+                "home_bench": len(fm.home.bench),
+                "away_bench": len(fm.away.bench),
+            }
             if fm.player_ids:
-                st.markdown("**🩺 Ficha de jugador** (club, forma de la temporada y estado/lesión)")
-                jugador = st.selectbox(
-                    "Jugador del XI", sorted(fm.player_ids), key="prode_player"
-                )
-                _render_player_card(_player_profile(fm.player_ids[jugador]))
+                with st.expander("🔎 Ver ficha completa de un jugador"):
+                    jugador = st.selectbox("Jugador", sorted(fm.player_ids), key="prode_player")
+                    _render_player_card(_player_profile(fm.player_ids[jugador]))
         else:
             st.caption("Formación todavía no disponible en la fuente (Fotmob). Reintentá más cerca del partido.")
     else:
@@ -632,14 +687,14 @@ with tab_prode:
 
     st.markdown("#### 🔍 Análisis por pilares")
     st.markdown(
-        '<p class="caption">📊 = respaldado por datos · 🔮 = estimación (sin datos de jugadores).</p>',
+        '<p class="caption">📊 = respaldado por datos · 🔮 = estimación.</p>',
         unsafe_allow_html=True,
     )
     _render_pillars(
         _build_pillars(
             p_home_team, p_away_team,
             referee=p_referee, referee_country=p_referee_country,
-            lineups=p_lineups, weather=p_weather,
+            lineups=p_lineups, weather=p_weather, squad=p_squad,
         )
     )
 

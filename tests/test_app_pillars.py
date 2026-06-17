@@ -81,6 +81,28 @@ def test_historial_aparece_en_mentalidad():
     assert "10" in ment.texto  # PJ del historial
 
 
+def test_squad_convierte_duelos_y_bancos_en_dato():
+    squad = {
+        "home_top": ("Messi", 8.5), "away_top": ("Neymar", 7.9),
+        "home_bench": 9, "away_bench": 9,
+    }
+    ps = prematch_pillars(
+        _report(0.6, 0.2, 0.2, 1.6, 1.0), home="Argentina", away="Brazil", squad=squad,
+    )
+    duelos = next(p for p in ps if "Emparejamientos" in p.titulo)
+    bancos = next(p for p in ps if "desgaste" in p.titulo.lower())
+    assert duelos.fundamento == DATO and "Messi" in duelos.texto
+    assert bancos.fundamento == DATO and "9" in bancos.texto
+
+
+def test_sin_squad_duelos_y_bancos_siguen_estimacion():
+    ps = prematch_pillars(_report(0.6, 0.2, 0.2, 1.6, 1.0), home="Argentina", away="Brazil")
+    duelos = next(p for p in ps if "Emparejamientos" in p.titulo)
+    bancos = next(p for p in ps if "desgaste" in p.titulo.lower())
+    assert duelos.fundamento == ESTIMACION
+    assert bancos.fundamento == ESTIMACION
+
+
 def test_clima_real_enriquece_contexto_y_es_dato():
     ps = prematch_pillars(
         _report(0.5, 0.25, 0.25, 1.4, 1.0), home="Argentina", away="Brazil",

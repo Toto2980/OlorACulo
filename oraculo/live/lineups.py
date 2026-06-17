@@ -24,9 +24,10 @@ DEFAULT_CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "cache"
 
 @dataclass(frozen=True)
 class TeamLineup:
-    team: str                       # canónico
+    team: str                        # canónico
     formation: Optional[str]
-    start_xi: list[tuple[str, str]]  # [(posición, nombre)]
+    start_xi: list[tuple[str, str]]  # [(posición/dorsal, nombre)]
+    bench: tuple = ()                # [(dorsal, nombre)] de los suplentes
 
 
 def parse_lineups(raw: dict) -> dict[str, TeamLineup]:
