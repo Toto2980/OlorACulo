@@ -190,6 +190,15 @@ def _apifootball_token():
         return os.environ.get("API_FOOTBALL_KEY")
 
 
+@st.cache_data(ttl=3600)
+def _season_supported():
+    """True si el plan de API-Football cubre WC2026, False si lo bloquea, None si no hay key."""
+    token = _apifootball_token()
+    if not token:
+        return None
+    return LineupClient(token).season_supported()
+
+
 @st.cache_data(ttl=300)
 def _lineups_for(home: str, away: str, date_iso: str):
     """(lineup_home, lineup_away) o None. Cacheado 5 min (cuida las 100 req/día)."""
@@ -595,6 +604,12 @@ with tab_prode:
             st.caption(
                 "ℹ️ Agregá `API_FOOTBALL_KEY` en `.streamlit/secrets.toml` para ver el XI "
                 "confirmado (entra ~30 min antes del partido)."
+            )
+        elif _season_supported() is False:
+            st.caption(
+                "⚠️ El plan **gratuito** de API-Football no cubre la temporada 2026 (solo 2022–2024), "
+                "así que las formaciones del Mundial no están disponibles sin plan pago. "
+                "El resto del análisis no depende de esto."
             )
         elif chosen["readiness"] in LINEUP_READY:
             p_lineups = _lineups_for(p_home_team, p_away_team, chosen["kickoff"].date().isoformat())

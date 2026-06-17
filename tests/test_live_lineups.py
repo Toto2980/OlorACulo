@@ -74,3 +74,28 @@ def test_lineup_client_sin_token_no_rompe_y_devuelve_none(tmp_path):
 
 def test_parse_lineups_respuesta_vacia_es_dict_vacio():
     assert parse_lineups({"response": []}) == {}
+
+
+def _seed_fixtures_cache(tmp_path, payload):
+    import json
+    (tmp_path / "apifootball_fixtures_wc.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_season_supported_false_si_el_plan_no_cubre_la_temporada(tmp_path):
+    _seed_fixtures_cache(tmp_path, {
+        "results": 0,
+        "errors": {"plan": "Free plans do not have access to this season, try from 2022 to 2024."},
+        "response": [],
+    })
+    client = LineupClient("fake-key", cache_dir=tmp_path)
+    assert client.season_supported() is False
+
+
+def test_season_supported_true_si_hay_fixtures(tmp_path):
+    _seed_fixtures_cache(tmp_path, {"results": 104, "errors": [], "response": [{"fixture": {"id": 1}}]})
+    client = LineupClient("fake-key", cache_dir=tmp_path)
+    assert client.season_supported() is True
+
+
+def test_season_supported_sin_token_es_none(tmp_path):
+    assert LineupClient(None, cache_dir=tmp_path).season_supported() is None

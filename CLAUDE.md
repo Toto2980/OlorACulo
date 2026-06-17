@@ -91,6 +91,11 @@ data/
   oficiales entran ~T-30; sin key o fuera de ventana degrada a modo *probable* (solo modelo).
   **No alteran la predicción Poisson** (no hay ratings de jugadores gratis), solo enriquecen el texto.
   Lanzador: doble-click en `Correr OlorACulo.bat` / acceso directo del Escritorio.
+- **⚠️ Bloqueo verificado (2026-06-17):** el plan **gratuito** de API-Football **no da acceso a la
+  temporada 2026** ("Free plans do not have access to this season, try from 2022 to 2024"). O sea,
+  ninguna API REST gratis trae las formaciones del Mundial 2026. La UI lo detecta con
+  `LineupClient.season_supported()` y muestra un aviso honesto. Vía pendiente = scraping de los JSON
+  internos de Fotmob/Sofascore (gratis, sin key) detrás de la misma interfaz `lineups.py`.
 
 ## Pendientes opcionales
 - Calibrar `baseline` Poisson con grid más amplio (óptimo quedó en el borde)

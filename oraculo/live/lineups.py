@@ -97,15 +97,34 @@ class LineupClient:
         path.write_text(json.dumps(data), encoding="utf-8")
         return data
 
+    def _wc_fixtures(self) -> Optional[dict]:
+        return self._get(
+            "fixtures_wc", f"{BASE_URL}/fixtures?league={WC_LEAGUE}&season={WC_SEASON}", ttl=86400
+        )
+
+    def season_supported(self) -> Optional[bool]:
+        """True si el plan da acceso a WC2026, False si el plan lo bloquea, None si no se sabe.
+        OJO: el plan gratuito de API-Football NO cubre 2026 (solo 2022-2024)."""
+        if not self.token:
+            return None
+        fixtures = self._wc_fixtures()
+        if not fixtures:
+            return None
+        errs = fixtures.get("errors")
+        blocked = (
+            ("plan" in errs) if isinstance(errs, dict) else any("plan" in str(e) for e in (errs or []))
+        )
+        if blocked:
+            return False
+        return (fixtures.get("results", 0) or 0) > 0
+
     def lineups_for(
         self, home_canon: str, away_canon: str, date: datetime.date
     ) -> Optional[tuple[TeamLineup, TeamLineup]]:
         """(lineup_home, lineup_away) o None si no hay key/datos."""
         if not self.token:
             return None
-        fixtures = self._get(
-            "fixtures_wc", f"{BASE_URL}/fixtures?league={WC_LEAGUE}&season={WC_SEASON}", ttl=86400
-        )
+        fixtures = self._wc_fixtures()
         if not fixtures:
             return None
         fid = find_fixture_id(fixtures, home_canon, away_canon, date)
