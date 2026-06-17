@@ -29,6 +29,26 @@ def top_scorelines(matrix: np.ndarray, n: int = 5) -> list[tuple[tuple[int, int]
     return out
 
 
+def head_to_head(matches, team_a: str, team_b: str) -> tuple[int, int, int, int]:
+    """Historial entre dos equipos sobre el dataset histórico.
+    Devuelve (PJ, victorias_de_a, victorias_de_b, empates)."""
+    pj = wa = wb = dr = 0
+    pair = {team_a, team_b}
+    for m in matches:
+        if {m.home, m.away} != pair:
+            continue
+        pj += 1
+        if m.home_goals == m.away_goals:
+            dr += 1
+        else:
+            winner = m.home if m.home_goals > m.away_goals else m.away
+            if winner == team_a:
+                wa += 1
+            else:
+                wb += 1
+    return pj, wa, wb, dr
+
+
 def scoreline_hit(matrix, home_goals: int, away_goals: int, n: int = 5) -> bool:
     """True si el marcador real (home_goals, away_goals) está entre los n marcadores
     más probables de la matriz."""

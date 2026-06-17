@@ -1,0 +1,127 @@
+"""Análisis pre-partido por 6 pilares. Determinístico (sin LLM, sin internet):
+se arma a partir del MatchReport (Poisson) + extras reales cuando hay (árbitro,
+localía de anfitrión, historial, formaciones). Cada pilar se marca como DATO
+(respaldado por datos) o ESTIMACIÓN (lectura sin datos de jugadores)."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional, TYPE_CHECKING
+
+from app.flags import display_name
+
+if TYPE_CHECKING:
+    from oraculo.report.match_report import MatchReport
+
+DATO = "dato"
+ESTIMACION = "estimación"
+
+# Anfitriones del Mundial 2026 (localía real).
+HOSTS = {"United States", "Canada", "Mexico"}
+
+
+@dataclass
+class Pillar:
+    titulo: str
+    emoji: str
+    texto: str
+    fundamento: str  # DATO | ESTIMACION
+
+
+def _favorito(report: "MatchReport", home: str, away: str) -> tuple[str, str, float]:
+    if report.p_home >= report.p_away:
+        return home, away, report.p_home
+    return away, home, report.p_away
+
+
+def _tempo(report: "MatchReport") -> tuple[str, float]:
+    total = (report.xg_home or 0.0) + (report.xg_away or 0.0)
+    if total >= 2.7:
+        return "abierto", total
+    if total <= 2.2:
+        return "trabado", total
+    return "de intensidad media", total
+
+
+def prematch_pillars(
+    report: "MatchReport",
+    *,
+    home: str,
+    away: str,
+    referee: Optional[str] = None,
+    referee_country: Optional[str] = None,
+    local_team: Optional[str] = None,
+    h2h: Optional[tuple[int, int, int, int]] = None,
+    lineups=None,
+) -> list[Pillar]:
+    fav, undog, fav_p = _favorito(report, home, away)
+    parejo = max(report.p_home, report.p_draw, report.p_away) < 0.45
+    tempo, total_xg = _tempo(report)
+    H, A = display_name(home), display_name(away)
+    FAV, UND = display_name(fav), display_name(undog)
+    xh, xa = report.xg_home or 0.0, report.xg_away or 0.0
+
+    pillars: list[Pillar] = []
+
+    # 1 — Control del ritmo y posturas base
+    quien = "Cruce parejo, nadie domina claro" if parejo else f"{FAV} es el llamado a imponer su tempo ({fav_p * 100:.0f}%)"
+    if lineups:
+        f_home = getattr(lineups[0], "formation", None) or "?"
+        f_away = getattr(lineups[1], "formation", None) or "?"
+        txt1 = (
+            f"Choque de dibujos: {H} con {f_home} vs {A} con {f_away}. "
+            f"{quien}. El partido pinta {tempo} (xG total {total_xg:.1f})."
+        )
+    else:
+        txt1 = f"{quien}. El partido pinta {tempo} (xG total {total_xg:.1f})."
+    pillars.append(Pillar("Control del ritmo y posturas base", "🎛️", txt1, DATO))
+
+    # 2 — Emparejamientos individuales y zonas de conflicto
+    if abs(xh - xa) < 0.25:
+        txt2 = f"Sin un lado claramente más peligroso (xG {xh:.2f}–{xa:.2f}): se define en los duelos del medio y en las transiciones."
+    else:
+        lado = H if xh > xa else A
+        txt2 = f"El peso ofensivo cae del lado de {lado} (xG {xh:.2f}–{xa:.2f}); ahí está el mano a mano que rompe el equilibrio, y ojo a la pelota a la espalda."
+    txt2 += " Sin datos de jugadores, es lectura del modelo."
+    pillars.append(Pillar("Emparejamientos individuales y zonas de conflicto", "⚔️", txt2, ESTIMACION))
+
+    # 3 — Pelota parada y juego aéreo
+    if tempo == "trabado" or parejo:
+        txt3 = "Partido cerrado: la pelota parada pesa el doble — suele ser el abrelatas, y la mejor chance del más débil."
+    else:
+        txt3 = "Con el juego abierto, la pelota parada suma pero no debería ser lo decisivo."
+    pillars.append(Pillar("Pelota parada y juego aéreo", "🎯", txt3, ESTIMACION))
+
+    # 4 — Gestión del desgaste y los bancos
+    txt4 = "Los últimos 20-30' suelen definir los partidos cerrados. "
+    if not parejo:
+        txt4 += f"{FAV}, con la ventaja, intentará administrar; "
+    txt4 += "sin datos de plantel, la profundidad del banco queda como incógnita."
+    pillars.append(Pillar("Gestión del desgaste y los bancos", "🔋", txt4, ESTIMACION))
+
+    # 5 — Contexto ambiental
+    partes: list[str] = []
+    fund5 = ESTIMACION
+    if referee:
+        partes.append("Árbitro: " + referee + (f" ({referee_country})" if referee_country else ""))
+        fund5 = DATO
+    if local_team:
+        partes.append(f"{display_name(local_team)} juega casi de local (anfitrión)")
+        fund5 = DATO
+    else:
+        partes.append("Cancha neutral")
+    partes.append("clima/altitud no disponibles")
+    pillars.append(Pillar("Contexto ambiental", "🌎", ". ".join(partes) + ".", fund5))
+
+    # 6 — Mentalidad y manejo del momento
+    if parejo:
+        txt6 = "Dos parejos: gana quien maneje mejor el momento (presión, experiencia, liderazgo)."
+    else:
+        txt6 = f"{FAV} carga la mochila de favorito; {UND} juega liberado, sin nada que perder."
+    if h2h:
+        pj, wh, wa, dr = h2h
+        if pj:
+            txt6 += f" Historial: {pj} cruces, {H} {wh}–{wa} {A} y {dr} empates."
+    txt6 += " El primer gol y el reloj mandan en el plano mental."
+    pillars.append(Pillar("Mentalidad y manejo del momento", "🧠", txt6, DATO))
+
+    return pillars

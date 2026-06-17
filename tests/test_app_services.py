@@ -4,8 +4,9 @@ import numpy as np
 
 from oraculo.match import Match
 from oraculo.evaluate.backtest import EvalResult
-from app.services import top_scorelines, model_comparison, prode_verdict, scoreline_hit
+from app.services import top_scorelines, model_comparison, prode_verdict, scoreline_hit, head_to_head
 from oraculo.report.match_report import MatchReport, Speculative
+from oraculo.match import Match
 
 
 def test_top_scorelines_orders_by_probability():
@@ -94,3 +95,22 @@ def test_scoreline_hit_false_cuando_el_real_no_esta_en_el_top_n():
 def test_scoreline_hit_false_cuando_marcador_fuera_de_la_matriz():
     m = _matrix_con({(1, 0): 1.0})
     assert scoreline_hit(m, 20, 0, n=5) is False
+
+
+def _m(home, away, hg, ag):
+    return Match(datetime.date(2024, 1, 1), home, away, hg, ag, "WC", True)
+
+
+def test_head_to_head_cuenta_pj_y_resultados():
+    matches = [
+        _m("Argentina", "Brazil", 2, 0),   # gana A
+        _m("Brazil", "Argentina", 1, 1),   # empate
+        _m("Brazil", "Argentina", 3, 1),   # gana B
+        _m("Argentina", "Chile", 1, 0),    # otro cruce, no cuenta
+    ]
+    pj, wa, wb, dr = head_to_head(matches, "Argentina", "Brazil")
+    assert (pj, wa, wb, dr) == (3, 1, 1, 1)
+
+
+def test_head_to_head_sin_cruces_es_cero():
+    assert head_to_head([_m("Argentina", "Chile", 1, 0)], "Argentina", "Brazil") == (0, 0, 0, 0)
