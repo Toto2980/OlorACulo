@@ -80,8 +80,20 @@ data/
 - Pestañas En vivo / Cuadro / Verificación leen la API al abrir la app; sin proceso de fondo (readiness se calcula on-open).
 - Nombres de la API mapeados a canónicos en `live/names.py` (solo 4 difieren: Bosnia-Herzegovina, Cape Verde Islands, Congo DR, Czechia).
 
+## Análisis pre-partido (6 pilares) + formaciones
+- `app/pillars.py`: `prematch_pillars()` arma 6 pilares (ritmo/identidad, duelos, pelota parada,
+  desgaste/bancos, contexto ambiental, mentalidad/pedigrí) desde el `MatchReport` + extras reales
+  (árbitro, localía de anfitrión, historial `head_to_head`). Cada pilar se marca **dato** o **estimación**.
+- Se muestran en **Prode** (completo) y en **En vivo → Próximos** (resumen). El árbitro sale del
+  payload de `/matches` (`Fixture.referee`). Clima/altitud no disponibles (football-data no da venue).
+- **Formaciones**: `oraculo/live/lineups.py` (API-Football, `league=1, season=2026`, `fixtures/lineups`).
+  Requiere `API_FOOTBALL_KEY` en `.streamlit/secrets.toml` o env (gratis, 100 req/día). Las formaciones
+  oficiales entran ~T-30; sin key o fuera de ventana degrada a modo *probable* (solo modelo).
+  **No alteran la predicción Poisson** (no hay ratings de jugadores gratis), solo enriquecen el texto.
+  Lanzador: doble-click en `Correr OlorACulo.bat` / acceso directo del Escritorio.
+
 ## Pendientes opcionales
 - Calibrar `baseline` Poisson con grid más amplio (óptimo quedó en el borde)
-- Localía de anfitriones (USA/Canadá/México) en la simulación
+- Localía de anfitriones (USA/Canadá/México) en la simulación Monte Carlo (en pilares ya se marca)
 - Adaptador score_matrix para EloModel (actualmente no simula torneos)
-- Migrar `use_container_width` → `width=` en la UI (deprecado en Streamlit reciente)
+- Validar el mapping de fixtures API-Football con una API key real (alias en `live/names.py`)
