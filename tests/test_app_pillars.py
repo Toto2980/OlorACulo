@@ -79,3 +79,13 @@ def test_historial_aparece_en_mentalidad():
     ment = ps[5]
     assert "Mentalidad" in ment.titulo
     assert "10" in ment.texto  # PJ del historial
+
+
+def test_clima_real_enriquece_contexto_y_es_dato():
+    ps = prematch_pillars(
+        _report(0.5, 0.25, 0.25, 1.4, 1.0), home="Argentina", away="Brazil",
+        weather={"temperature": 23, "description": "Clear", "precipitation": 0},
+    )
+    ctx = next(p for p in ps if "ambiental" in p.titulo.lower())
+    assert "23" in ctx.texto
+    assert ctx.fundamento == DATO

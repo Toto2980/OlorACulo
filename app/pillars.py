@@ -52,6 +52,7 @@ def prematch_pillars(
     local_team: Optional[str] = None,
     h2h: Optional[tuple[int, int, int, int]] = None,
     lineups=None,
+    weather: Optional[dict] = None,
 ) -> list[Pillar]:
     fav, undog, fav_p = _favorito(report, home, away)
     parejo = max(report.p_home, report.p_draw, report.p_away) < 0.45
@@ -109,7 +110,17 @@ def prematch_pillars(
         fund5 = DATO
     else:
         partes.append("Cancha neutral")
-    partes.append("clima/altitud no disponibles")
+    if weather and weather.get("temperature") is not None:
+        desc = weather.get("description")
+        clima = f"Clima: {weather['temperature']}°C"
+        if desc:
+            clima += f", {desc.lower()}"
+        if weather.get("precipitation"):
+            clima += f", lluvia {weather['precipitation']} mm"
+        partes.append(clima)
+        fund5 = DATO
+    else:
+        partes.append("clima no disponible")
     pillars.append(Pillar("Contexto ambiental", "🌎", ". ".join(partes) + ".", fund5))
 
     # 6 — Mentalidad y manejo del momento

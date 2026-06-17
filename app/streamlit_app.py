@@ -34,8 +34,7 @@ import os
 
 from oraculo.live.client import LiveClient, LiveDataError
 from oraculo.live.fixtures import parse_fixtures
-from oraculo.live.lineups import LineupClient
-from oraculo.live.schedule import Readiness
+from oraculo.live.fotmob import FotmobClient
 from oraculo.report.match_report import build_match_report
 from oraculo.verify.predictor import frozen_poisson
 from oraculo.verify.scoring import score_match, aggregate, calibration_bins
@@ -157,13 +156,13 @@ def _local_team(home: str, away: str):
     return None
 
 
-def _build_pillars(home: str, away: str, *, referee=None, referee_country=None, lineups=None):
+def _build_pillars(home: str, away: str, *, referee=None, referee_country=None, lineups=None, weather=None):
     report = build_match_report(get_poisson(), home, away, neutral=True)
     h2h = head_to_head(get_matches(), home, away)
     return prematch_pillars(
         report, home=home, away=away,
         referee=referee, referee_country=referee_country,
-        local_team=_local_team(home, away), h2h=h2h, lineups=lineups,
+        local_team=_local_team(home, away), h2h=h2h, lineups=lineups, weather=weather,
     )
 
 
@@ -178,34 +177,15 @@ def _render_pillars(pillars, target=st):
 
 
 # --------------------------------------------------------------------------- #
-# Formaciones (API-Football, opcional por API key)
+# Formaciones (Fotmob, gratis y sin key; API-Football quedó deshabilitado)
 # --------------------------------------------------------------------------- #
-LINEUP_READY = {Readiness.T30, Readiness.T15, Readiness.EN_VIVO}
-
-
-def _apifootball_token():
-    try:
-        return st.secrets["API_FOOTBALL_KEY"]
-    except Exception:
-        return os.environ.get("API_FOOTBALL_KEY")
-
-
-@st.cache_data(ttl=3600)
-def _season_supported():
-    """True si el plan de API-Football cubre WC2026, False si lo bloquea, None si no hay key."""
-    token = _apifootball_token()
-    if not token:
-        return None
-    return LineupClient(token).season_supported()
-
-
 @st.cache_data(ttl=300)
-def _lineups_for(home: str, away: str, date_iso: str):
-    """(lineup_home, lineup_away) o None. Cacheado 5 min (cuida las 100 req/día)."""
-    token = _apifootball_token()
-    if not token:
+def _fotmob_lineups(home: str, away: str, date_iso: str):
+    """FotmobLineups (formación + XI + clima + confirmado) o None. Cacheado 5 min."""
+    try:
+        return FotmobClient().lineups_for(home, away, datetime.date.fromisoformat(date_iso))
+    except Exception:
         return None
-    return LineupClient(token).lineups_for(home, away, datetime.date.fromisoformat(date_iso))
 
 
 def _render_lineups(home: str, away: str, lineups) -> None:
@@ -596,32 +576,25 @@ with tab_prode:
         unsafe_allow_html=True,
     )
 
-    # Formaciones (solo dentro de ~T-30 y si hay API key). No cambian el número.
+    # Formaciones desde Fotmob (gratis, sin key). Probable antes, confirmada ~1h antes.
+    # No cambian el número Poisson: solo enriquecen el texto.
     p_lineups = None
+    p_weather = None
     st.markdown("#### 🧩 Formaciones")
     if candidatos:
-        if not _apifootball_token():
-            st.caption(
-                "ℹ️ Agregá `API_FOOTBALL_KEY` en `.streamlit/secrets.toml` para ver el XI "
-                "confirmado (entra ~30 min antes del partido)."
-            )
-        elif _season_supported() is False:
-            st.caption(
-                "⚠️ El plan **gratuito** de API-Football no cubre la temporada 2026 (solo 2022–2024), "
-                "así que las formaciones del Mundial no están disponibles sin plan pago. "
-                "El resto del análisis no depende de esto."
-            )
-        elif chosen["readiness"] in LINEUP_READY:
-            p_lineups = _lineups_for(p_home_team, p_away_team, chosen["kickoff"].date().isoformat())
-            if p_lineups:
-                st.success("Formación confirmada (T-30) ✅")
-                _render_lineups(p_home_team, p_away_team, p_lineups)
+        fm = _fotmob_lineups(p_home_team, p_away_team, chosen["kickoff"].date().isoformat())
+        if fm:
+            p_lineups = (fm.home, fm.away)
+            p_weather = fm.weather
+            if fm.confirmed:
+                st.success("Formación confirmada ✅ · fuente: Fotmob")
             else:
-                st.caption("Formación todavía no publicada por la fuente (reintentá cerca del inicio).")
+                st.info("Formación probable 🔶 (se confirma ~1h antes) · fuente: Fotmob")
+            _render_lineups(p_home_team, p_away_team, p_lineups)
         else:
-            st.caption("Formación oficial ~30 min antes del partido (modo *probable* por ahora).")
+            st.caption("Formación todavía no disponible en la fuente (Fotmob). Reintentá más cerca del partido.")
     else:
-        st.caption("Elegí un partido del fixture para intentar traer las formaciones.")
+        st.caption("Elegí un partido del fixture para traer las formaciones.")
 
     st.markdown("#### 🔍 Análisis por pilares")
     st.markdown(
@@ -631,7 +604,8 @@ with tab_prode:
     _render_pillars(
         _build_pillars(
             p_home_team, p_away_team,
-            referee=p_referee, referee_country=p_referee_country, lineups=p_lineups,
+            referee=p_referee, referee_country=p_referee_country,
+            lineups=p_lineups, weather=p_weather,
         )
     )
 

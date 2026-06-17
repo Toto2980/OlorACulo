@@ -85,17 +85,17 @@ data/
   desgaste/bancos, contexto ambiental, mentalidad/pedigrí) desde el `MatchReport` + extras reales
   (árbitro, localía de anfitrión, historial `head_to_head`). Cada pilar se marca **dato** o **estimación**.
 - Se muestran en **Prode** (completo) y en **En vivo → Próximos** (resumen). El árbitro sale del
-  payload de `/matches` (`Fixture.referee`). Clima/altitud no disponibles (football-data no da venue).
-- **Formaciones**: `oraculo/live/lineups.py` (API-Football, `league=1, season=2026`, `fixtures/lineups`).
-  Requiere `API_FOOTBALL_KEY` en `.streamlit/secrets.toml` o env (gratis, 100 req/día). Las formaciones
-  oficiales entran ~T-30; sin key o fuera de ventana degrada a modo *probable* (solo modelo).
-  **No alteran la predicción Poisson** (no hay ratings de jugadores gratis), solo enriquecen el texto.
-  Lanzador: doble-click en `Correr OlorACulo.bat` / acceso directo del Escritorio.
-- **⚠️ Bloqueo verificado (2026-06-17):** el plan **gratuito** de API-Football **no da acceso a la
-  temporada 2026** ("Free plans do not have access to this season, try from 2022 to 2024"). O sea,
-  ninguna API REST gratis trae las formaciones del Mundial 2026. La UI lo detecta con
-  `LineupClient.season_supported()` y muestra un aviso honesto. Vía pendiente = scraping de los JSON
-  internos de Fotmob/Sofascore (gratis, sin key) detrás de la misma interfaz `lineups.py`.
+  payload de `/matches` (`Fixture.referee`); el **clima** sale de Fotmob (ver abajo) y alimenta el
+  pilar de contexto.
+- **Formaciones (FUENTE ACTIVA = Fotmob, gratis y sin key):** `oraculo/live/fotmob.py` scrapea la
+  JSON interna `https://www.fotmob.com/api/data/{matches?date=YYYYMMDD, matchDetails?matchId=}`.
+  `content.lineup.lineupType` = `standard` (confirmada ✅) vs `predicted` (probable 🔶, se confirma
+  ~1h antes). Trae formación + XI + `content.weather`. User-Agent de navegador, cache 5 min, degrada
+  a `None` ante cualquier error. **No alteran la predicción Poisson** (sin ratings de jugadores), solo
+  enriquecen el texto. Lanzador: doble-click en `Correr OlorACulo.bat` / acceso directo del Escritorio.
+- **API-Football quedó DESHABILITADO** (`oraculo/live/lineups.py` sigue en el repo pero la app no lo
+  usa): su plan **gratuito no da acceso a la temporada 2026** ("Free plans do not have access to this
+  season, try from 2022 to 2024"). Sofascore también descartado (403 Cloudflare).
 
 ## Pendientes opcionales
 - Calibrar `baseline` Poisson con grid más amplio (óptimo quedó en el borde)
